@@ -3,8 +3,8 @@
 A portable C++20 derivatives pricing and risk engine built around reproducible,
 multithreaded Monte Carlo simulation.
 
-> **Status:** Initial project foundation. Pricing functionality will be added in
-> subsequent milestones.
+> **Status:** Active development. The project foundation, core domain types, and
+> European call/put payoff abstractions are implemented.
 
 This project estimates derivative fair values under risk-neutral assumptions. It
 is not a trading system, stock-price predictor, signal generator, or execution
