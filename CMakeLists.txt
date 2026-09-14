@@ -24,6 +24,7 @@ add_library(
     src/instruments/european_call.cpp
     src/instruments/european_put.cpp
     src/pricing/analytical_black_scholes.cpp
+    src/statistics/running_statistics.cpp
 )
 target_compile_features(mcpricing PUBLIC cxx_std_20)
 target_include_directories(
@@ -59,6 +60,7 @@ if(BUILD_TESTING)
         tests/test_black_scholes.cpp
         tests/test_domain_types.cpp
         tests/test_payoffs.cpp
+        tests/test_statistics.cpp
         tests/test_smoke.cpp
     )
     target_compile_features(mc_tests PRIVATE cxx_std_20)
