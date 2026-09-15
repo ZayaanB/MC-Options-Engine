@@ -5,7 +5,8 @@ multithreaded Monte Carlo simulation.
 
 > **Status:** Active development. The project foundation, core domain types,
 > European payoffs, analytical Black-Scholes pricing, and streaming statistics
-> are implemented.
+> are implemented. Single-threaded Monte Carlo pricing is now available through
+> the engine API.
 
 This project estimates derivative fair values under risk-neutral assumptions. It
 is not a trading system, stock-price predictor, signal generator, or execution
@@ -43,7 +44,8 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Run the current executable:
+Run the current executable to price the canonical European call example with one
+million single-threaded paths:
 
 ```bash
 ./build/mcprice
