@@ -23,7 +23,9 @@ add_library(
     mcpricing
     src/instruments/european_call.cpp
     src/instruments/european_put.cpp
+    src/models/black_scholes.cpp
     src/pricing/analytical_black_scholes.cpp
+    src/pricing/monte_carlo_engine.cpp
     src/statistics/running_statistics.cpp
 )
 target_compile_features(mcpricing PUBLIC cxx_std_20)
@@ -59,6 +61,7 @@ if(BUILD_TESTING)
         mc_tests
         tests/test_black_scholes.cpp
         tests/test_domain_types.cpp
+        tests/test_monte_carlo.cpp
         tests/test_payoffs.cpp
         tests/test_statistics.cpp
         tests/test_smoke.cpp
