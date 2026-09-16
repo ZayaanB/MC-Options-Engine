@@ -6,7 +6,7 @@ multithreaded Monte Carlo simulation.
 > **Status:** Active development. The project foundation, core domain types,
 > European payoffs, analytical Black-Scholes pricing, and streaming statistics
 > are implemented. Single-threaded Monte Carlo pricing is now available through
-> the engine API.
+> the engine API and validated against analytical reference values.
 
 This project estimates derivative fair values under risk-neutral assumptions. It
 is not a trading system, stock-price predictor, signal generator, or execution
@@ -53,6 +53,20 @@ million single-threaded paths:
 
 Catch2 is discovered from the system when available. Otherwise, CMake fetches
 the pinned version declared in `CMakeLists.txt` during configuration.
+
+## Independent Python validation
+
+The Python validator implements Black-Scholes with SciPy and Monte Carlo with
+NumPy, independently of the C++ engine:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r python/requirements.txt
+.venv/bin/python python/validate_black_scholes.py
+```
+
+It reports analytical call/put prices, Monte Carlo estimates, standard errors,
+and normalized errors for the canonical scenario.
 
 ## Platform targets
 

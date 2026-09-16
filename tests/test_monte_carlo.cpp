@@ -63,7 +63,7 @@ TEST_CASE("single-threaded Monte Carlo call agrees with Black-Scholes statistica
     const mc::PricingResult result = engine.price(call, kMarket, kOption, config);
     const double analytical = mc::black_scholes_call(kMarket, kOption);
 
-    REQUIRE(std::abs(result.price - analytical) < 4.0 * result.standard_error);
+    REQUIRE(std::abs(result.price - analytical) < 3.0 * result.standard_error);
     REQUIRE(result.confidence_lower ==
             Catch::Approx(result.price - 1.96 * result.standard_error));
     REQUIRE(result.confidence_upper ==
@@ -73,6 +73,39 @@ TEST_CASE("single-threaded Monte Carlo call agrees with Black-Scholes statistica
     REQUIRE(result.standard_error > 0.0);
     REQUIRE(result.runtime_seconds > 0.0);
     REQUIRE(result.paths_per_second > 0.0);
+}
+
+TEST_CASE("single-threaded Monte Carlo put agrees with Black-Scholes statistically",
+          "[monte-carlo]") {
+    const mc::EuropeanPut put{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    const auto config = simulation_config(250'000);
+
+    const mc::PricingResult result = engine.price(put, kMarket, kOption, config);
+    const double analytical = mc::black_scholes_put(kMarket, kOption);
+
+    REQUIRE(std::abs(result.price - analytical) < 3.0 * result.standard_error);
+    REQUIRE(result.confidence_lower < result.price);
+    REQUIRE(result.confidence_upper > result.price);
+    REQUIRE(result.paths == config.num_paths);
+}
+
+TEST_CASE("Monte Carlo call and put estimates satisfy put-call parity statistically",
+          "[monte-carlo][parity]") {
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::EuropeanPut put{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    const auto config = simulation_config(250'000);
+
+    const mc::PricingResult call_result = engine.price(call, kMarket, kOption, config);
+    const mc::PricingResult put_result = engine.price(put, kMarket, kOption, config);
+    const double expected_difference =
+        kMarket.spot - kOption.strike * std::exp(-kMarket.risk_free_rate * kOption.maturity);
+    const double conservative_error =
+        3.0 * (call_result.standard_error + put_result.standard_error);
+
+    REQUIRE(std::abs((call_result.price - put_result.price) - expected_difference) <
+            conservative_error);
 }
 
 TEST_CASE("fixed full configuration reproduces Monte Carlo estimates", "[monte-carlo][rng]") {

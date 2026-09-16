@@ -2,9 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
-#include <string>
-#include <string_view>
+
+#include "mc/validation.hpp"
 
 namespace mc {
 namespace {
@@ -14,37 +13,19 @@ struct AnalyticalPrices {
     double put;
 };
 
-void require_finite(const double value, const std::string_view name) {
-    if (!std::isfinite(value)) {
-        throw std::invalid_argument{std::string{name} + " must be finite"};
-    }
-}
-
-void validate_inputs(const double spot, const double strike, const double rate,
-                     const double volatility, const double maturity) {
-    require_finite(spot, "spot");
-    require_finite(strike, "strike");
-    require_finite(rate, "rate");
-    require_finite(volatility, "volatility");
-    require_finite(maturity, "maturity");
-
-    if (spot <= 0.0) {
-        throw std::invalid_argument{"spot must be positive"};
-    }
-    if (strike <= 0.0) {
-        throw std::invalid_argument{"strike must be positive"};
-    }
-    if (volatility < 0.0) {
-        throw std::invalid_argument{"volatility must be nonnegative"};
-    }
-    if (maturity < 0.0) {
-        throw std::invalid_argument{"maturity must be nonnegative"};
-    }
-}
-
 AnalyticalPrices calculate_prices(const double spot, const double strike, const double rate,
                                   const double volatility, const double maturity) {
-    validate_inputs(spot, strike, rate, volatility, maturity);
+    const MarketData market{
+        .spot = spot,
+        .risk_free_rate = rate,
+        .volatility = volatility,
+    };
+    const OptionParameters option{
+        .strike = strike,
+        .maturity = maturity,
+    };
+    validate(market);
+    validate(option);
 
     if (maturity == 0.0) {
         return {
