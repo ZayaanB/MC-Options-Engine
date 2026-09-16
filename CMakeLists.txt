@@ -27,6 +27,7 @@ add_library(
     src/pricing/analytical_black_scholes.cpp
     src/pricing/monte_carlo_engine.cpp
     src/statistics/running_statistics.cpp
+    src/validation.cpp
 )
 target_compile_features(mcpricing PUBLIC cxx_std_20)
 target_include_directories(
@@ -65,6 +66,7 @@ if(BUILD_TESTING)
         tests/test_payoffs.cpp
         tests/test_statistics.cpp
         tests/test_smoke.cpp
+        tests/test_validation.cpp
     )
     target_compile_features(mc_tests PRIVATE cxx_std_20)
     target_link_libraries(mc_tests PRIVATE mcpricing Catch2::Catch2WithMain)
