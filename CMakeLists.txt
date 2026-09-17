@@ -43,6 +43,11 @@ target_compile_features(mcprice PRIVATE cxx_std_20)
 target_link_libraries(mcprice PRIVATE mcpricing)
 mc_enable_warnings(mcprice)
 
+add_executable(mc_convergence benchmarks/convergence.cpp)
+target_compile_features(mc_convergence PRIVATE cxx_std_20)
+target_link_libraries(mc_convergence PRIVATE mcpricing)
+mc_enable_warnings(mc_convergence)
+
 include(CTest)
 
 if(BUILD_TESTING)
