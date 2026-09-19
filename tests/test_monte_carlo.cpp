@@ -174,7 +174,7 @@ TEST_CASE("one path returns a price and undefined uncertainty", "[monte-carlo][b
     REQUIRE(std::isnan(result.confidence_upper));
 }
 
-TEST_CASE("single-threaded engine rejects unsupported or invalid configuration",
+TEST_CASE("engine rejects unsupported or invalid configuration",
           "[monte-carlo][validation]") {
     const mc::EuropeanCall call{kOption.strike};
     const mc::MonteCarloEngine engine;
@@ -184,7 +184,7 @@ TEST_CASE("single-threaded engine rejects unsupported or invalid configuration",
     REQUIRE_THROWS_AS(engine.price(call, kMarket, kOption, config), std::invalid_argument);
 
     config = simulation_config();
-    config.num_threads = 2;
+    config.num_threads = 0;
     REQUIRE_THROWS_AS(engine.price(call, kMarket, kOption, config), std::invalid_argument);
 
     config = simulation_config();

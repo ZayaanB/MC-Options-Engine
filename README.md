@@ -5,9 +5,16 @@ multithreaded Monte Carlo simulation.
 
 > **Status:** Active development. The project foundation, core domain types,
 > European payoffs, analytical Black-Scholes pricing, and streaming statistics
-> are implemented. Single-threaded Monte Carlo pricing is now available through
+> are implemented. Single-threaded and multithreaded Monte Carlo pricing are available through
 > the engine API, validated against analytical reference values, and exercised
 > through a reproducible convergence experiment.
+
+Monte Carlo workers use independent, deterministic RNG streams and thread-local
+statistics; results are merged after all workers finish. The same full configuration
+reproduces an estimate on the same toolchain. Changing the thread count can change
+the random streams and numerical result, while estimates remain statistically
+consistent. `std::normal_distribution` does not guarantee bit-identical sequences
+across standard-library implementations.
 
 This project estimates derivative fair values under risk-neutral assumptions. It
 is not a trading system, stock-price predictor, signal generator, or execution

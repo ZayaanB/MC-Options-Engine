@@ -11,6 +11,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(Threads REQUIRED)
+
 function(mc_enable_warnings target_name)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
@@ -37,6 +39,7 @@ target_include_directories(
         $<INSTALL_INTERFACE:include>
 )
 mc_enable_warnings(mcpricing)
+target_link_libraries(mcpricing PUBLIC Threads::Threads)
 
 add_executable(mcprice src/main.cpp)
 target_compile_features(mcprice PRIVATE cxx_std_20)
@@ -68,6 +71,7 @@ if(BUILD_TESTING)
         tests/test_black_scholes.cpp
         tests/test_domain_types.cpp
         tests/test_monte_carlo.cpp
+        tests/test_multithreading.cpp
         tests/test_payoffs.cpp
         tests/test_statistics.cpp
         tests/test_smoke.cpp
