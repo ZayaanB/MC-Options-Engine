@@ -1,6 +1,10 @@
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
+#include <thread>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -38,6 +42,32 @@ public:
 
 private:
     mutable std::atomic<std::uint64_t> count_{0};
+};
+
+class WorkerCountingCall final : public mc::Instrument {
+public:
+    double payoff(const double terminal_price) const noexcept override {
+        const std::lock_guard lock{mutex_};
+        const auto id = std::this_thread::get_id();
+        for (std::size_t slot = 0; slot < worker_ids_.size(); ++slot) {
+            if (worker_ids_[slot] == id || worker_ids_[slot] == std::thread::id{}) {
+                worker_ids_[slot] = id;
+                ++counts_[slot];
+                break;
+            }
+        }
+        return terminal_price > 100.0 ? terminal_price - 100.0 : 0.0;
+    }
+
+    std::array<std::uint64_t, 8> counts() const noexcept {
+        const std::lock_guard lock{mutex_};
+        return counts_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    mutable std::array<std::thread::id, 8> worker_ids_{};
+    mutable std::array<std::uint64_t, 8> counts_{};
 };
 
 }  // namespace
@@ -91,4 +121,51 @@ TEST_CASE("same multithreaded configuration reproduces the estimate",
     REQUIRE(first.price == second.price);
     REQUIRE(first.sample_variance == second.sample_variance);
     REQUIRE(first.standard_error == second.standard_error);
+}
+
+TEST_CASE("workers receive balanced disjoint path counts", "[monte-carlo][threads]") {
+    const WorkerCountingCall call;
+    const mc::MonteCarloEngine engine;
+
+    const auto result = engine.price(call, kMarket, kOption, configuration(17, 4));
+    auto counts = call.counts();
+    std::sort(counts.begin(), counts.end());
+
+    REQUIRE(result.paths == 17);
+    REQUIRE(counts == std::array<std::uint64_t, 8>{0, 0, 0, 0, 4, 4, 4, 5});
+}
+
+TEST_CASE("thread counts from one to eight remain statistically consistent",
+          "[monte-carlo][threads]") {
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    const double analytical = mc::black_scholes_call(kMarket, kOption);
+
+    for (const std::size_t threads : {1U, 2U, 4U, 8U}) {
+        const auto result = engine.price(call, kMarket, kOption, configuration(250'000, threads));
+
+        INFO("threads = " << threads);
+        REQUIRE(result.paths == 250'000);
+        REQUIRE(std::abs(result.price - analytical) < 4.0 * result.standard_error);
+        REQUIRE(result.confidence_lower <= result.price);
+        REQUIRE(result.price <= result.confidence_upper);
+    }
+}
+
+TEST_CASE("parallel reduction is bit reproducible for the same full configuration",
+          "[monte-carlo][threads][rng]") {
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    const auto config = configuration(31'337, 8);
+    const auto reference = engine.price(call, kMarket, kOption, config);
+
+    for (int repetition = 0; repetition < 10; ++repetition) {
+        const auto result = engine.price(call, kMarket, kOption, config);
+        REQUIRE(result.paths == reference.paths);
+        REQUIRE(result.price == reference.price);
+        REQUIRE(result.sample_variance == reference.sample_variance);
+        REQUIRE(result.standard_error == reference.standard_error);
+        REQUIRE(result.confidence_lower == reference.confidence_lower);
+        REQUIRE(result.confidence_upper == reference.confidence_upper);
+    }
 }

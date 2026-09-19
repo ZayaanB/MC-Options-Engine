@@ -15,6 +15,18 @@ reproduces an estimate on the same toolchain. Changing the thread count can chan
 the random streams and numerical result, while estimates remain statistically
 consistent. `std::normal_distribution` does not guarantee bit-identical sequences
 across standard-library implementations.
+Custom instruments used with multiple threads must make `payoff()` safe for
+concurrent calls; the provided European instruments are immutable.
+
+On Linux with GCC, the parallel tests can also be checked with ThreadSanitizer:
+
+```bash
+cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_CXX_FLAGS=-fsanitize=thread \
+  -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+cmake --build build-tsan --target mc_tests
+./build-tsan/mc_tests --reporter compact
+```
 
 This project estimates derivative fair values under risk-neutral assumptions. It
 is not a trading system, stock-price predictor, signal generator, or execution
