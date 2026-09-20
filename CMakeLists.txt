@@ -51,6 +51,11 @@ target_compile_features(mc_convergence PRIVATE cxx_std_20)
 target_link_libraries(mc_convergence PRIVATE mcpricing)
 mc_enable_warnings(mc_convergence)
 
+add_executable(mc_scaling benchmarks/scaling.cpp)
+target_compile_features(mc_scaling PRIVATE cxx_std_20)
+target_link_libraries(mc_scaling PRIVATE mcpricing)
+mc_enable_warnings(mc_scaling)
+
 include(CTest)
 
 if(BUILD_TESTING)

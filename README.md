@@ -92,6 +92,23 @@ absolute error, standard error, and runtime. The plotting script creates:
 - `results/convergence_price.png`
 - `results/convergence_error.png`
 
+## Thread scaling benchmark
+
+Run three timed repetitions for each combination of 1M, 5M, and 10M paths with
+1, 2, 4, and 8 threads, subject to reported hardware concurrency:
+
+```bash
+./build/mc_scaling results/scaling.csv
+.venv/bin/python python/plot_scaling.py
+```
+
+The CSV keeps all three raw runtimes and their median. Throughput uses the median
+runtime; speedup is the one-thread median divided by the corresponding thread
+count's median, and parallel efficiency is speedup divided by thread count.
+Results are specific to the measured development machine and are not universal
+performance claims. Hardware and build details are recorded in
+`results/scaling_environment.md`.
+
 ## Platform targets
 
 The engine, CLI, tests, and standard benchmarks target Linux and macOS. The
