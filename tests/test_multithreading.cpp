@@ -169,3 +169,36 @@ TEST_CASE("parallel reduction is bit reproducible for the same full configuratio
         REQUIRE(result.confidence_upper == reference.confidence_upper);
     }
 }
+
+TEST_CASE("antithetic work remains paired and reproducible across workers",
+          "[monte-carlo][threads][antithetic]") {
+    const CountingCall call;
+    const mc::MonteCarloEngine engine;
+    auto config = configuration(14, 4);
+    config.antithetic = true;
+
+    const auto first = engine.price(call, kMarket, kOption, config);
+    const auto second = engine.price(call, kMarket, kOption, config);
+
+    REQUIRE(call.count() == 28);
+    REQUIRE(first.paths == 14);
+    REQUIRE(first.observations == 7);
+    REQUIRE(first.price == second.price);
+    REQUIRE(first.sample_variance == second.sample_variance);
+    REQUIRE(first.standard_error == second.standard_error);
+}
+
+TEST_CASE("more workers than antithetic pairs does not create empty work",
+          "[monte-carlo][threads][antithetic]") {
+    const CountingCall call;
+    const mc::MonteCarloEngine engine;
+    auto config = configuration(4, 8);
+    config.antithetic = true;
+
+    const auto result = engine.price(call, kMarket, kOption, config);
+
+    REQUIRE(call.count() == 4);
+    REQUIRE(result.paths == 4);
+    REQUIRE(result.observations == 2);
+    REQUIRE(std::isfinite(result.standard_error));
+}

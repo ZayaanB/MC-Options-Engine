@@ -18,6 +18,14 @@ across standard-library implementations.
 Custom instruments used with multiple threads must make `payoff()` safe for
 concurrent calls; the provided European instruments are immutable.
 
+Antithetic mode (`SimulationConfig::antithetic = true`) requires an even total
+trajectory count. Each generated normal draw `Z` produces two terminal prices
+from `Z` and `-Z`; their average discounted payoff is one independent statistical
+observation. Thus `PricingResult::paths` remains the requested trajectory count,
+while `PricingResult::observations` is half as large in antithetic mode. Its
+sample variance is across pair averages, and its standard error and 95% confidence
+interval use the pair count. In standard mode, paths and observations are equal.
+
 On Linux with GCC, the parallel tests can also be checked with ThreadSanitizer:
 
 ```bash
@@ -108,6 +116,25 @@ count's median, and parallel efficiency is speedup divided by thread count.
 Results are specific to the measured development machine and are not universal
 performance claims. Hardware and build details are recorded in
 `results/scaling_environment.md`.
+
+## Antithetic variance benchmark
+
+Compare standard and antithetic European-call Monte Carlo with the same total
+trajectory counts (1M and 5M), fixed seed, and 1, 2, or 4 threads when available:
+
+```bash
+./build/mc_antithetic results/antithetic.csv
+```
+
+Each configuration is timed three times. The CSV includes sample variance,
+estimator variance (`standard_error²`), standard error, raw runtimes, and median
+runtime. Compare **estimator variance**, not raw sample variance: one antithetic
+observation averages two trajectories. Equal trajectory counts do not imply equal
+normal-generator work—the antithetic version draws half as many normals. Results
+are specific to the recorded development-machine environment.
+The measurements and environment are in `results/antithetic.csv` and
+`results/antithetic_environment.md`. For this European-call scenario, the
+measured estimator variance was approximately halved at equal total paths.
 
 ## Platform targets
 

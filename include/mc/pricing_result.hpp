@@ -11,6 +11,7 @@ struct PricingResult {
     double confidence_lower{};
     double confidence_upper{};
     std::uint64_t paths{};
+    std::uint64_t observations{};
     double runtime_seconds{};
     double paths_per_second{};
 };
