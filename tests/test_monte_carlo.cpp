@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <random>
 #include <stdexcept>
 
 #include <catch2/catch_approx.hpp>
@@ -69,6 +70,7 @@ TEST_CASE("single-threaded Monte Carlo call agrees with Black-Scholes statistica
     REQUIRE(result.confidence_upper ==
             Catch::Approx(result.price + 1.96 * result.standard_error));
     REQUIRE(result.paths == config.num_paths);
+    REQUIRE(result.observations == config.num_paths);
     REQUIRE(result.sample_variance > 0.0);
     REQUIRE(result.standard_error > 0.0);
     REQUIRE(result.runtime_seconds > 0.0);
@@ -174,7 +176,85 @@ TEST_CASE("one path returns a price and undefined uncertainty", "[monte-carlo][b
     REQUIRE(std::isnan(result.confidence_upper));
 }
 
-TEST_CASE("engine rejects unsupported or invalid configuration",
+TEST_CASE("antithetic pairs use averaged payoffs as independent observations",
+          "[monte-carlo][antithetic]") {
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    auto config = simulation_config(4);
+    config.antithetic = true;
+
+    std::mt19937_64 rng{config.seed};
+    std::normal_distribution<double> normal{0.0, 1.0};
+    const mc::BlackScholesModel model{kMarket, kOption.maturity};
+    const auto paired_payoff = [&] {
+        const double z = normal(rng);
+        return model.discount_factor() * 0.5 *
+               (call.payoff(model.terminal_price(z)) +
+                call.payoff(model.terminal_price(-z)));
+    };
+    const double first = paired_payoff();
+    const double second = paired_payoff();
+    const auto result = engine.price(call, kMarket, kOption, config);
+
+    REQUIRE(result.paths == 4);
+    REQUIRE(result.observations == 2);
+    REQUIRE(result.price == Catch::Approx((first + second) / 2.0));
+    REQUIRE(result.sample_variance ==
+            Catch::Approx((first - second) * (first - second) / 2.0));
+    REQUIRE(result.standard_error ==
+            Catch::Approx(std::sqrt(result.sample_variance / 2.0)));
+}
+
+TEST_CASE("one antithetic pair has undefined uncertainty", "[monte-carlo][antithetic]") {
+    const mc::EuropeanPut put{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    auto config = simulation_config(2);
+    config.antithetic = true;
+    const auto result = engine.price(put, kMarket, kOption, config);
+
+    REQUIRE(result.paths == 2);
+    REQUIRE(result.observations == 1);
+    REQUIRE(std::isfinite(result.price));
+    REQUIRE(std::isnan(result.sample_variance));
+    REQUIRE(std::isnan(result.standard_error));
+    REQUIRE(std::isnan(result.confidence_lower));
+    REQUIRE(std::isnan(result.confidence_upper));
+}
+
+TEST_CASE("antithetic call and put agree with Black-Scholes statistically",
+          "[monte-carlo][antithetic]") {
+    const mc::MonteCarloEngine engine;
+    auto config = simulation_config(250'000);
+    config.antithetic = true;
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::EuropeanPut put{kOption.strike};
+
+    const auto call_result = engine.price(call, kMarket, kOption, config);
+    const auto put_result = engine.price(put, kMarket, kOption, config);
+
+    REQUIRE(call_result.observations == config.num_paths / 2);
+    REQUIRE(put_result.observations == config.num_paths / 2);
+    REQUIRE(std::abs(call_result.price - mc::black_scholes_call(kMarket, kOption)) <
+            4.0 * call_result.standard_error);
+    REQUIRE(std::abs(put_result.price - mc::black_scholes_put(kMarket, kOption)) <
+            4.0 * put_result.standard_error);
+}
+
+TEST_CASE("antithetic pairing reduces call estimator variance at equal path counts",
+          "[monte-carlo][antithetic]") {
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    auto config = simulation_config(250'000);
+    const auto standard = engine.price(call, kMarket, kOption, config);
+    config.antithetic = true;
+    const auto paired = engine.price(call, kMarket, kOption, config);
+
+    REQUIRE(standard.paths == paired.paths);
+    REQUIRE(standard.observations == 2 * paired.observations);
+    REQUIRE(paired.standard_error < standard.standard_error);
+}
+
+TEST_CASE("engine rejects invalid configuration",
           "[monte-carlo][validation]") {
     const mc::EuropeanCall call{kOption.strike};
     const mc::MonteCarloEngine engine;
@@ -189,6 +269,7 @@ TEST_CASE("engine rejects unsupported or invalid configuration",
 
     config = simulation_config();
     config.antithetic = true;
+    config.num_paths = 3;
     REQUIRE_THROWS_AS(engine.price(call, kMarket, kOption, config), std::invalid_argument);
 
     auto invalid_market = kMarket;

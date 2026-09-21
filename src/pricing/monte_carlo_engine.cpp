@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <exception>
 #include <random>
-#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -23,10 +22,6 @@ void validate_inputs(const MarketData& market, const OptionParameters& option,
     validate(market);
     validate(option);
     validate(config);
-
-    if (config.antithetic) {
-        throw std::invalid_argument{"antithetic simulation is not available yet"};
-    }
 }
 
 // Preserve the original stream for one-thread runs; mix additional worker seeds.
@@ -42,15 +37,21 @@ std::uint64_t worker_seed(const std::uint64_t seed, const std::size_t worker_id)
 }
 
 RunningStatistics simulate_worker(const Instrument& instrument, const BlackScholesModel& model,
-                                  const std::uint64_t paths, const std::uint64_t seed) {
+                                  const std::uint64_t observations, const std::uint64_t seed,
+                                  const bool antithetic) {
     std::mt19937_64 random_engine{seed};
     std::normal_distribution<double> standard_normal{0.0, 1.0};
     RunningStatistics statistics;
 
-    for (std::uint64_t path = 0; path < paths; ++path) {
-        const double terminal_price = model.terminal_price(standard_normal(random_engine));
-        const double discounted_payoff = model.discount_factor() * instrument.payoff(terminal_price);
-        statistics.add(discounted_payoff);
+    for (std::uint64_t observation = 0; observation < observations; ++observation) {
+        const double normal = standard_normal(random_engine);
+        const double payoff = instrument.payoff(model.terminal_price(normal));
+        if (antithetic) {
+            const double opposite_payoff = instrument.payoff(model.terminal_price(-normal));
+            statistics.add(model.discount_factor() * 0.5 * (payoff + opposite_payoff));
+        } else {
+            statistics.add(model.discount_factor() * payoff);
+        }
     }
     return statistics;
 }
@@ -64,28 +65,32 @@ PricingResult MonteCarloEngine::price(const Instrument& instrument, const Market
 
     const BlackScholesModel model{market, option.maturity};
     RunningStatistics statistics;
+    const std::uint64_t observations =
+        config.antithetic ? config.num_paths / 2 : config.num_paths;
 
     const auto start = std::chrono::steady_clock::now();
 
     if (config.num_threads == 1) {
-        statistics = simulate_worker(instrument, model, config.num_paths, config.seed);
+        statistics = simulate_worker(instrument, model, observations, config.seed,
+                                     config.antithetic);
     } else {
-        // More workers than paths would create threads with no work.
+        // An antithetic pair is indivisible and is assigned to one worker.
         const auto worker_count = static_cast<std::size_t>(
-            std::min<std::uint64_t>(config.num_paths, config.num_threads));
-        const auto base_paths = config.num_paths / worker_count;
-        const auto remainder = config.num_paths % worker_count;
+            std::min<std::uint64_t>(observations, config.num_threads));
+        const auto base_observations = observations / worker_count;
+        const auto remainder = observations % worker_count;
         std::vector<RunningStatistics> worker_statistics(worker_count);
         std::vector<std::exception_ptr> worker_errors(worker_count);
         std::vector<std::jthread> workers;
         workers.reserve(worker_count);
 
         for (std::size_t worker_id = 0; worker_id < worker_count; ++worker_id) {
-            const auto paths = base_paths + (worker_id < remainder ? 1 : 0);
-            workers.emplace_back([&, worker_id, paths] {
+            const auto worker_observations = base_observations + (worker_id < remainder ? 1 : 0);
+            workers.emplace_back([&, worker_id, worker_observations] {
                 try {
                     worker_statistics[worker_id] = simulate_worker(
-                        instrument, model, paths, worker_seed(config.seed, worker_id));
+                        instrument, model, worker_observations,
+                        worker_seed(config.seed, worker_id), config.antithetic);
                 } catch (...) {
                     worker_errors[worker_id] = std::current_exception();
                 }
@@ -113,7 +118,8 @@ PricingResult MonteCarloEngine::price(const Instrument& instrument, const Market
         .standard_error = standard_error,
         .confidence_lower = statistics.mean() - kConfidenceMultiplier95 * standard_error,
         .confidence_upper = statistics.mean() + kConfidenceMultiplier95 * standard_error,
-        .paths = statistics.count(),
+        .paths = config.num_paths,
+        .observations = statistics.count(),
         .runtime_seconds = runtime_seconds,
         .paths_per_second = static_cast<double>(config.num_paths) / runtime_seconds,
     };

@@ -56,6 +56,11 @@ target_compile_features(mc_scaling PRIVATE cxx_std_20)
 target_link_libraries(mc_scaling PRIVATE mcpricing)
 mc_enable_warnings(mc_scaling)
 
+add_executable(mc_antithetic benchmarks/antithetic.cpp)
+target_compile_features(mc_antithetic PRIVATE cxx_std_20)
+target_link_libraries(mc_antithetic PRIVATE mcpricing)
+mc_enable_warnings(mc_antithetic)
+
 include(CTest)
 
 if(BUILD_TESTING)
