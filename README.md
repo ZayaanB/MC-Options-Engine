@@ -136,6 +136,21 @@ The measurements and environment are in `results/antithetic.csv` and
 `results/antithetic_environment.md`. For this European-call scenario, the
 measured estimator variance was approximately halved at equal total paths.
 
+## Finite-difference Greeks
+
+`GreeksEngine` calculates Delta, Gamma, and Vega through central finite
+differences around Monte Carlo prices. The default absolute spot bump is 1% of
+the current spot and the default absolute volatility bump is `0.01`; both are
+configurable through `GreeksConfig`. Vega is reported as the price change per
+one volatility percentage point, so the derivative with respect to unit
+volatility is multiplied by `0.01` before it is returned.
+
+Central differences require the down-bumped inputs to remain in the model
+domain. The spot bump must be positive and smaller than spot, and the volatility
+bump must be positive and no greater than current volatility. Therefore, while
+pricing supports zero volatility, central-difference Vega is not defined at
+zero volatility with a positive symmetric bump.
+
 ## Platform targets
 
 The engine, CLI, tests, and standard benchmarks target Linux and macOS. The
