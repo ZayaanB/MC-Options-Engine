@@ -27,6 +27,7 @@ add_library(
     src/instruments/european_put.cpp
     src/models/black_scholes.cpp
     src/pricing/analytical_black_scholes.cpp
+    src/pricing/greeks_engine.cpp
     src/pricing/monte_carlo_engine.cpp
     src/statistics/running_statistics.cpp
     src/validation.cpp
@@ -80,6 +81,7 @@ if(BUILD_TESTING)
         mc_tests
         tests/test_black_scholes.cpp
         tests/test_domain_types.cpp
+        tests/test_greeks.cpp
         tests/test_monte_carlo.cpp
         tests/test_multithreading.cpp
         tests/test_payoffs.cpp
