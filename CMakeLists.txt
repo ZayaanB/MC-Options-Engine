@@ -62,6 +62,11 @@ target_compile_features(mc_antithetic PRIVATE cxx_std_20)
 target_link_libraries(mc_antithetic PRIVATE mcpricing)
 mc_enable_warnings(mc_antithetic)
 
+add_executable(mc_greeks_variance benchmarks/greeks_variance.cpp)
+target_compile_features(mc_greeks_variance PRIVATE cxx_std_20)
+target_link_libraries(mc_greeks_variance PRIVATE mcpricing)
+mc_enable_warnings(mc_greeks_variance)
+
 include(CTest)
 
 if(BUILD_TESTING)
