@@ -151,6 +151,27 @@ bump must be positive and no greater than current volatility. Therefore, while
 pricing supports zero volatility, central-difference Vega is not defined at
 zero volatility with a positive symmetric bump.
 
+All bumped valuations deliberately reuse the identical `SimulationConfig`.
+Because the Monte Carlo engine reproduces its Gaussian streams for an identical
+full configuration, `V(S+h)`, `V(S)`, `V(S-h)`, and the volatility bumps are
+driven by common random numbers. This preserves correlation between valuations
+and reduces the sampling noise in their finite differences.
+
+Compare common and independent random numbers for the central-difference Delta
+at the same path budget with:
+
+```bash
+./build/mc_greeks_variance results/greeks_variance.csv
+```
+
+The experiment reports the sample variance of 100 independently replicated
+Delta estimates for each method. The common and independent methods each run
+two 50,000-path prices per replication; only the seed coupling differs.
+Measured data and the machine configuration are recorded in
+`results/greeks_variance.csv` and `results/greeks_variance_environment.md`. In
+the recorded at-the-money call experiment, common random numbers reduced the
+sample variance by approximately 419.6x; that factor is scenario-specific.
+
 ## Platform targets
 
 The engine, CLI, tests, and standard benchmarks target Linux and macOS. The

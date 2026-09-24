@@ -12,7 +12,9 @@
 #include "mc/option_parameters.hpp"
 #include "mc/pricing/analytical_black_scholes.hpp"
 #include "mc/pricing/greeks_engine.hpp"
+#include "mc/pricing/monte_carlo_engine.hpp"
 #include "mc/simulation_config.hpp"
+#include "mc/statistics/running_statistics.hpp"
 
 namespace {
 
@@ -106,4 +108,39 @@ TEST_CASE("Greeks engine rejects invalid central-difference bumps", "[greeks][va
                          {.spot_bump = 1.0,
                           .volatility_bump = std::numeric_limits<double>::infinity()}),
         std::invalid_argument);
+}
+
+TEST_CASE("common random numbers reduce Monte Carlo Delta variance", "[greeks][rng]") {
+    constexpr std::uint64_t replications = 40;
+    constexpr std::uint64_t paths = 10'000;
+    constexpr double bump = 1.0;
+    constexpr std::uint64_t independent_offset = 0x9e3779b97f4a7c15ULL;
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::GreeksEngine greeks_engine;
+    const mc::MonteCarloEngine pricing_engine;
+    mc::RunningStatistics common_deltas;
+    mc::RunningStatistics independent_deltas;
+
+    for (std::uint64_t replication = 0; replication < replications; ++replication) {
+        const std::uint64_t seed = 1'000 + replication;
+        const mc::SimulationConfig simulation{paths, seed, 1, 0, false};
+        common_deltas.add(
+            greeks_engine
+                .calculate(call, kMarket, kOption, simulation,
+                           {.spot_bump = bump, .volatility_bump = 0.01})
+                .delta);
+
+        const mc::MarketData up{kMarket.spot + bump, kMarket.risk_free_rate,
+                                kMarket.volatility};
+        const mc::MarketData down{kMarket.spot - bump, kMarket.risk_free_rate,
+                                  kMarket.volatility};
+        auto down_simulation = simulation;
+        down_simulation.seed += independent_offset;
+        const double up_price = pricing_engine.price(call, up, kOption, simulation).price;
+        const double down_price = pricing_engine.price(call, down, kOption, down_simulation).price;
+        independent_deltas.add((up_price - down_price) / (2.0 * bump));
+    }
+
+    REQUIRE(common_deltas.variance() < independent_deltas.variance());
+    REQUIRE(independent_deltas.variance() / common_deltas.variance() > 20.0);
 }
