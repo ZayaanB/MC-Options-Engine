@@ -42,9 +42,14 @@ target_include_directories(
 mc_enable_warnings(mcpricing)
 target_link_libraries(mcpricing PUBLIC Threads::Threads)
 
+add_library(mccli src/cli/price_options.cpp)
+target_compile_features(mccli PUBLIC cxx_std_20)
+target_link_libraries(mccli PUBLIC mcpricing)
+mc_enable_warnings(mccli)
+
 add_executable(mcprice src/main.cpp)
 target_compile_features(mcprice PRIVATE cxx_std_20)
-target_link_libraries(mcprice PRIVATE mcpricing)
+target_link_libraries(mcprice PRIVATE mccli)
 mc_enable_warnings(mcprice)
 
 add_executable(mc_convergence benchmarks/convergence.cpp)
@@ -85,6 +90,7 @@ if(BUILD_TESTING)
     add_executable(
         mc_tests
         tests/test_black_scholes.cpp
+        tests/test_cli.cpp
         tests/test_domain_types.cpp
         tests/test_greeks.cpp
         tests/test_monte_carlo.cpp
@@ -95,7 +101,7 @@ if(BUILD_TESTING)
         tests/test_validation.cpp
     )
     target_compile_features(mc_tests PRIVATE cxx_std_20)
-    target_link_libraries(mc_tests PRIVATE mcpricing Catch2::Catch2WithMain)
+    target_link_libraries(mc_tests PRIVATE mcpricing mccli Catch2::Catch2WithMain)
     mc_enable_warnings(mc_tests)
 
     add_test(NAME mc_tests COMMAND mc_tests)

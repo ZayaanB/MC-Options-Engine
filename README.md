@@ -60,12 +60,34 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Run the current executable to price the canonical European call example with one
-million single-threaded paths:
+Show the CLI help:
 
 ```bash
-./build/mcprice
+./build/mcprice --help
 ```
+
+Price a European call with analytical Black–Scholes and Monte Carlo (the default
+method for European options):
+
+```bash
+./build/mcprice price \
+  --type call \
+  --spot 100 \
+  --strike 105 \
+  --rate 0.04 \
+  --volatility 0.25 \
+  --maturity 0.5 \
+  --paths 5000000 \
+  --threads 8 \
+  --seed 42 \
+  --antithetic
+```
+
+Use `--method mc`, `--method analytical`, or `--method both`. For `both`, the
+output includes the analytical price, Monte Carlo estimate, absolute difference,
+standard error, 95% confidence interval, runtime, and throughput. Negative
+interest rates, zero maturity, and zero volatility are valid. Non-finite values
+and invalid model inputs are rejected with a nonzero exit status.
 
 Catch2 is discovered from the system when available. Otherwise, CMake fetches
 the pinned version declared in `CMakeLists.txt` during configuration.
