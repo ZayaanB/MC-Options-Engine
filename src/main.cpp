@@ -31,6 +31,7 @@ Options:
   --maturity VALUE              Maturity in years (default: 1)
   --paths N                     Total Monte Carlo trajectories (default: 1000000)
   --threads N                   Worker threads (default: 1)
+  --steps N                     Monitoring steps for path simulation (default: 1)
   --seed N                      Unsigned RNG seed (default: 42)
   --antithetic                  Enable antithetic variates; paths must be even
   --help                        Show this help
@@ -98,6 +99,7 @@ void run_price(const mc::cli::PriceOptions& options) {
                   << "Paths:                  " << result.paths << '\n'
                   << "Observations:           " << result.observations << '\n'
                   << "Threads:                " << options.simulation.num_threads << '\n'
+                  << "Steps:                  " << options.simulation.num_steps << '\n'
                   << "Seed:                   " << options.simulation.seed << '\n'
                   << "Antithetic:             "
                   << (options.simulation.antithetic ? "yes" : "no") << '\n'

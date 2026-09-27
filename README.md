@@ -79,6 +79,7 @@ method for European options):
   --maturity 0.5 \
   --paths 5000000 \
   --threads 8 \
+  --steps 252 \
   --seed 42 \
   --antithetic
 ```
@@ -88,6 +89,28 @@ output includes the analytical price, Monte Carlo estimate, absolute difference,
 standard error, 95% confidence interval, runtime, and throughput. Negative
 interest rates, zero maturity, and zero volatility are valid. Non-finite values
 and invalid model inputs are rejected with a nonzero exit status.
+
+## Path simulation infrastructure
+
+`GeometricBrownianMotion` provides memory-efficient, equally spaced,
+risk-neutral GBM evolution. It precomputes the drift and diffusion for one time
+step and advances only the current price:
+
+```cpp
+mc::GeometricBrownianMotion model{market, maturity, config.num_steps};
+double current_price = model.initial_price();
+for (std::size_t step = 0; step < model.num_steps(); ++step) {
+    current_price = model.advance(current_price, standard_normal(rng));
+    // Consume current_price here; no complete path needs to be retained.
+}
+```
+
+For `M` steps, the post-step values occur at `jT/M` for `j = 1,...,M`.
+Consumers therefore observe maturity but not the initial spot unless they
+explicitly choose to do so. `SimulationConfig::num_steps` defaults to one and
+must be positive whenever path simulation is used. Terminal-only European
+pricing continues to sample its exact terminal distribution directly, so
+changing `--steps` does not change a European call or put result.
 
 Catch2 is discovered from the system when available. Otherwise, CMake fetches
 the pinned version declared in `CMakeLists.txt` during configuration.

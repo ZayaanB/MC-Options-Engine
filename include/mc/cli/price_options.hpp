@@ -17,7 +17,7 @@ struct PriceOptions {
     PricingMethod method{PricingMethod::both};
     MarketData market{100.0, 0.05, 0.20};
     OptionParameters option{100.0, 1.0};
-    SimulationConfig simulation{1'000'000, 42, 1, 0, false};
+    SimulationConfig simulation{1'000'000, 42, 1, 0, false, 1};
 };
 
 [[nodiscard]] PriceOptions parse_price_options(std::span<const std::string_view> arguments);

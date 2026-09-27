@@ -26,6 +26,7 @@ add_library(
     src/instruments/european_call.cpp
     src/instruments/european_put.cpp
     src/models/black_scholes.cpp
+    src/models/geometric_brownian_motion.cpp
     src/pricing/analytical_black_scholes.cpp
     src/pricing/greeks_engine.cpp
     src/pricing/monte_carlo_engine.cpp
@@ -96,6 +97,7 @@ if(BUILD_TESTING)
         tests/test_monte_carlo.cpp
         tests/test_multithreading.cpp
         tests/test_payoffs.cpp
+        tests/test_path_simulation.cpp
         tests/test_statistics.cpp
         tests/test_smoke.cpp
         tests/test_validation.cpp
