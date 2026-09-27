@@ -32,6 +32,7 @@ TEST_CASE("simulation inputs retain the complete execution configuration", "[dom
         .num_threads = std::size_t{8},
         .batch_size = std::size_t{16'384},
         .antithetic = true,
+        .num_steps = 252,
     };
 
     STATIC_REQUIRE(config.num_paths == 1'000'000);
@@ -39,4 +40,5 @@ TEST_CASE("simulation inputs retain the complete execution configuration", "[dom
     STATIC_REQUIRE(config.num_threads == 8);
     STATIC_REQUIRE(config.batch_size == 16'384);
     STATIC_REQUIRE(config.antithetic);
+    STATIC_REQUIRE(config.num_steps == 252);
 }

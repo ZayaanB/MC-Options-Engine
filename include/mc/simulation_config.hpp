@@ -11,6 +11,7 @@ struct SimulationConfig {
     std::size_t num_threads{};
     std::size_t batch_size{};
     bool antithetic{};
+    std::size_t num_steps{1};
 };
 
 }  // namespace mc
