@@ -9,7 +9,7 @@
 
 namespace mc::cli {
 
-enum class OptionType { call, put };
+enum class OptionType { call, put, asian_call };
 enum class PricingMethod { monte_carlo, analytical, both };
 
 struct PriceOptions {

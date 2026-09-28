@@ -25,11 +25,13 @@ add_library(
     mcpricing
     src/instruments/european_call.cpp
     src/instruments/european_put.cpp
+    src/instruments/arithmetic_asian_call.cpp
     src/models/black_scholes.cpp
     src/models/geometric_brownian_motion.cpp
     src/pricing/analytical_black_scholes.cpp
     src/pricing/greeks_engine.cpp
     src/pricing/monte_carlo_engine.cpp
+    src/pricing/path_monte_carlo_engine.cpp
     src/statistics/running_statistics.cpp
     src/validation.cpp
 )
@@ -90,6 +92,7 @@ if(BUILD_TESTING)
 
     add_executable(
         mc_tests
+        tests/test_asian_option.cpp
         tests/test_black_scholes.cpp
         tests/test_cli.cpp
         tests/test_domain_types.cpp

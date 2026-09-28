@@ -66,6 +66,19 @@ TEST_CASE("price CLI accepts all pricing methods", "[cli]") {
     REQUIRE(mc::cli::parse_price_options(both).method == mc::cli::PricingMethod::both);
 }
 
+TEST_CASE("price CLI accepts an arithmetic Asian call", "[cli]") {
+    constexpr std::array arguments{
+        std::string_view{"--type"}, std::string_view{"asian-call"},
+        std::string_view{"--steps"}, std::string_view{"252"},
+    };
+    const auto options = mc::cli::parse_price_options(arguments);
+
+    REQUIRE(options.type == mc::cli::OptionType::asian_call);
+    REQUIRE(options.method == mc::cli::PricingMethod::both);
+    REQUIRE(options.simulation.num_steps == 252);
+    REQUIRE(mc::cli::option_type_name(options.type) == "arithmetic Asian call");
+}
+
 TEST_CASE("price CLI rejects malformed arguments", "[cli][validation]") {
     constexpr std::array missing_value{std::string_view{"--spot"}};
     constexpr std::array bad_number{std::string_view{"--spot"}, std::string_view{"100usd"}};

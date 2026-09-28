@@ -3,17 +3,20 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "mc/cli/price_options.hpp"
+#include "mc/instruments/arithmetic_asian_call.hpp"
 #include "mc/instruments/european_call.hpp"
 #include "mc/instruments/european_put.hpp"
 #include "mc/instruments/instrument.hpp"
 #include "mc/pricing/analytical_black_scholes.hpp"
 #include "mc/pricing/monte_carlo_engine.hpp"
+#include "mc/pricing/path_monte_carlo_engine.hpp"
 #include "mc/validation.hpp"
 
 namespace {
@@ -22,7 +25,7 @@ constexpr std::string_view kUsage = R"(Usage:
   mcprice price [options]
 
 Options:
-  --type call|put               Instrument type (default: call)
+  --type call|put|asian-call    Instrument type (default: call)
   --method mc|analytical|both   Pricing method (default: both)
   --spot VALUE                  Spot price (default: 100)
   --strike VALUE                Strike price (default: 100)
@@ -39,8 +42,13 @@ Options:
 
 double analytical_price(const mc::cli::OptionType type, const mc::MarketData& market,
                         const mc::OptionParameters& option) {
-    return type == mc::cli::OptionType::call ? mc::black_scholes_call(market, option)
-                                             : mc::black_scholes_put(market, option);
+    if (type == mc::cli::OptionType::call) {
+        return mc::black_scholes_call(market, option);
+    }
+    if (type == mc::cli::OptionType::put) {
+        return mc::black_scholes_put(market, option);
+    }
+    throw std::logic_error{"arithmetic Asian call has no analytical implementation"};
 }
 
 std::unique_ptr<mc::Instrument> make_instrument(const mc::cli::OptionType type,
@@ -48,31 +56,70 @@ std::unique_ptr<mc::Instrument> make_instrument(const mc::cli::OptionType type,
     if (type == mc::cli::OptionType::call) {
         return std::make_unique<mc::EuropeanCall>(strike);
     }
-    return std::make_unique<mc::EuropeanPut>(strike);
+    if (type == mc::cli::OptionType::put) {
+        return std::make_unique<mc::EuropeanPut>(strike);
+    }
+    throw std::logic_error{"arithmetic Asian call is not a terminal-only instrument"};
 }
 
 void print_inputs(const mc::cli::PriceOptions& options) {
-    std::cout << "European " << mc::cli::option_type_name(options.type) << '\n'
-              << "Method:                 " << mc::cli::pricing_method_name(options.method)
-              << '\n'
-              << "Spot:                   " << options.market.spot << '\n'
+    if (options.type == mc::cli::OptionType::asian_call) {
+        std::cout << mc::cli::option_type_name(options.type) << '\n'
+                  << "Method:                 mc (analytical reference unavailable)\n";
+    } else {
+        std::cout << "European " << mc::cli::option_type_name(options.type) << '\n'
+                  << "Method:                 "
+                  << mc::cli::pricing_method_name(options.method) << '\n';
+    }
+    std::cout << "Spot:                   " << options.market.spot << '\n'
               << "Strike:                 " << options.option.strike << '\n'
               << "Rate:                   " << options.market.risk_free_rate << '\n'
               << "Volatility:             " << options.market.volatility << '\n'
               << "Maturity:               " << options.option.maturity << " years\n";
 }
 
+void print_monte_carlo_result(const mc::PricingResult& result,
+                              const mc::cli::PriceOptions& options,
+                              const std::optional<double> reference) {
+    std::cout << "Monte Carlo estimate:   " << result.price << '\n';
+    if (reference) {
+        std::cout << "Absolute difference:    " << std::abs(result.price - *reference) << '\n';
+    }
+    std::cout << "Standard error:         " << result.standard_error << '\n'
+              << "95% confidence interval:[" << result.confidence_lower << ", "
+              << result.confidence_upper << "]\n"
+              << "Paths:                  " << result.paths << '\n'
+              << "Observations:           " << result.observations << '\n'
+              << "Threads:                " << options.simulation.num_threads << '\n'
+              << "Steps:                  " << options.simulation.num_steps << '\n'
+              << "Seed:                   " << options.simulation.seed << '\n'
+              << "Antithetic:             "
+              << (options.simulation.antithetic ? "yes" : "no") << '\n'
+              << "Runtime:                " << result.runtime_seconds << " s\n"
+              << "Throughput:             " << result.paths_per_second / 1'000'000.0
+              << " M paths/s\n";
+}
+
 void run_price(const mc::cli::PriceOptions& options) {
     mc::validate(options.market);
     mc::validate(options.option);
 
-    const bool run_analytical = options.method != mc::cli::PricingMethod::monte_carlo;
-    const bool run_monte_carlo = options.method != mc::cli::PricingMethod::analytical;
+    const bool has_analytical = options.type != mc::cli::OptionType::asian_call;
+    const bool run_analytical =
+        has_analytical && options.method != mc::cli::PricingMethod::monte_carlo;
+    const bool run_monte_carlo =
+        !has_analytical || options.method != mc::cli::PricingMethod::analytical;
     if (run_monte_carlo) {
         mc::validate(options.simulation);
     }
-    const double reference =
-        run_analytical ? analytical_price(options.type, options.market, options.option) : 0.0;
+    if (options.type == mc::cli::OptionType::asian_call &&
+        options.simulation.num_steps == 0) {
+        throw std::invalid_argument{"steps must be positive for path simulation"};
+    }
+    const std::optional<double> reference =
+        run_analytical ? std::optional<double>{
+                             analytical_price(options.type, options.market, options.option)}
+                       : std::nullopt;
 
     std::cout << std::fixed << std::setprecision(6)
               << "Monte Carlo Options Pricing Engine\n"
@@ -81,31 +128,24 @@ void run_price(const mc::cli::PriceOptions& options) {
     std::cout << '\n';
 
     if (run_analytical) {
-        std::cout << "Analytical price:       " << reference << '\n';
+        std::cout << "Analytical price:       " << *reference << '\n';
+    } else if (!has_analytical) {
+        std::cout << "Analytical reference:   unavailable for arithmetic Asian call\n";
     }
     if (run_monte_carlo) {
-        const auto instrument = make_instrument(options.type, options.option.strike);
-        const mc::MonteCarloEngine engine;
-        const auto result =
-            engine.price(*instrument, options.market, options.option, options.simulation);
-
-        std::cout << "Monte Carlo estimate:   " << result.price << '\n';
-        if (run_analytical) {
-            std::cout << "Absolute difference:    " << std::abs(result.price - reference) << '\n';
+        mc::PricingResult result;
+        if (options.type == mc::cli::OptionType::asian_call) {
+            const mc::ArithmeticAsianCall instrument{options.option.strike};
+            const mc::PathMonteCarloEngine engine;
+            result = engine.price(instrument, options.market, options.option,
+                                  options.simulation);
+        } else {
+            const auto instrument = make_instrument(options.type, options.option.strike);
+            const mc::MonteCarloEngine engine;
+            result = engine.price(*instrument, options.market, options.option,
+                                  options.simulation);
         }
-        std::cout << "Standard error:         " << result.standard_error << '\n'
-                  << "95% confidence interval:[" << result.confidence_lower << ", "
-                  << result.confidence_upper << "]\n"
-                  << "Paths:                  " << result.paths << '\n'
-                  << "Observations:           " << result.observations << '\n'
-                  << "Threads:                " << options.simulation.num_threads << '\n'
-                  << "Steps:                  " << options.simulation.num_steps << '\n'
-                  << "Seed:                   " << options.simulation.seed << '\n'
-                  << "Antithetic:             "
-                  << (options.simulation.antithetic ? "yes" : "no") << '\n'
-                  << "Runtime:                " << result.runtime_seconds << " s\n"
-                  << "Throughput:             "
-                  << result.paths_per_second / 1'000'000.0 << " M paths/s\n";
+        print_monte_carlo_result(result, options, reference);
     }
 }
 
