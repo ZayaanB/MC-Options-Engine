@@ -79,7 +79,6 @@ method for European options):
   --maturity 0.5 \
   --paths 5000000 \
   --threads 8 \
-  --steps 252 \
   --seed 42 \
   --antithetic
 ```
@@ -111,6 +110,36 @@ explicitly choose to do so. `SimulationConfig::num_steps` defaults to one and
 must be positive whenever path simulation is used. Terminal-only European
 pricing continues to sample its exact terminal distribution directly, so
 changing `--steps` does not change a European call or put result.
+
+## Arithmetic Asian call
+
+Price a discretely monitored arithmetic-average Asian call with Monte Carlo:
+
+```bash
+./build/mcprice price \
+  --type asian-call \
+  --spot 100 \
+  --strike 100 \
+  --rate 0.05 \
+  --volatility 0.20 \
+  --maturity 1 \
+  --paths 1000000 \
+  --threads 8 \
+  --steps 252 \
+  --seed 42 \
+  --antithetic
+```
+
+For `M` monitoring steps, the arithmetic average uses prices at `jT/M` for
+`j = 1,...,M`: the initial spot is excluded and maturity is included. Each
+worker retains only its current price and running sum, rather than an `N`-by-`M`
+path matrix. Antithetic mode evolves `Z` and `-Z` paths together and treats the
+pair-average payoff as one independent observation.
+
+No analytical arithmetic-Asian reference is implemented in V1. Selecting
+`asian-call` therefore uses Monte Carlo even if `--method analytical` or
+`--method both` is requested, and the CLI states that the analytical reference
+is unavailable.
 
 Catch2 is discovered from the system when available. Otherwise, CMake fetches
 the pinned version declared in `CMakeLists.txt` during configuration.

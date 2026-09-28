@@ -64,8 +64,10 @@ PriceOptions parse_price_options(const std::span<const std::string_view> argumen
                 options.type = OptionType::call;
             } else if (value == "put") {
                 options.type = OptionType::put;
+            } else if (value == "asian-call") {
+                options.type = OptionType::asian_call;
             } else {
-                throw std::invalid_argument{"--type must be call or put"};
+                throw std::invalid_argument{"--type must be call, put, or asian-call"};
             }
         } else if (argument == "--method") {
             const auto value = take_value(arguments, index, argument);
@@ -117,7 +119,15 @@ PriceOptions parse_price_options(const std::span<const std::string_view> argumen
 }
 
 std::string_view option_type_name(const OptionType type) noexcept {
-    return type == OptionType::call ? "call" : "put";
+    switch (type) {
+        case OptionType::call:
+            return "call";
+        case OptionType::put:
+            return "put";
+        case OptionType::asian_call:
+            return "arithmetic Asian call";
+    }
+    return "unknown";
 }
 
 std::string_view pricing_method_name(const PricingMethod method) noexcept {
