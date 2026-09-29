@@ -39,12 +39,12 @@ std::uint64_t worker_seed(const std::uint64_t seed, const std::size_t worker_id)
     return value ^ (value >> 31);
 }
 
-RunningStatistics simulate_worker(const ArithmeticAsianCall& instrument,
-                                  const GeometricBrownianMotion& model,
-                                  const std::uint64_t observations,
-                                  const std::uint64_t seed, const bool antithetic) {
-    std::mt19937_64 random_engine{seed};
-    std::normal_distribution<double> standard_normal{0.0, 1.0};
+RunningStatistics simulate_batch(const ArithmeticAsianCall& instrument,
+                                 const GeometricBrownianMotion& model,
+                                 const std::uint64_t observations,
+                                 std::mt19937_64& random_engine,
+                                 std::normal_distribution<double>& standard_normal,
+                                 const bool antithetic) {
     RunningStatistics statistics;
 
     for (std::uint64_t observation = 0; observation < observations; ++observation) {
@@ -78,6 +78,29 @@ RunningStatistics simulate_worker(const ArithmeticAsianCall& instrument,
     return statistics;
 }
 
+RunningStatistics simulate_worker(const ArithmeticAsianCall& instrument,
+                                  const GeometricBrownianMotion& model,
+                                  const std::uint64_t observations,
+                                  const std::uint64_t seed,
+                                  const std::size_t configured_batch_size,
+                                  const bool antithetic) {
+    std::mt19937_64 random_engine{seed};
+    std::normal_distribution<double> standard_normal{0.0, 1.0};
+    RunningStatistics statistics;
+    const std::uint64_t batch_size = configured_batch_size == 0
+                                         ? observations
+                                         : static_cast<std::uint64_t>(configured_batch_size);
+
+    std::uint64_t remaining = observations;
+    while (remaining > 0) {
+        const std::uint64_t current_batch = std::min(remaining, batch_size);
+        statistics.merge(simulate_batch(instrument, model, current_batch, random_engine,
+                                        standard_normal, antithetic));
+        remaining -= current_batch;
+    }
+    return statistics;
+}
+
 }  // namespace
 
 PricingResult PathMonteCarloEngine::price(const ArithmeticAsianCall& instrument,
@@ -93,7 +116,8 @@ PricingResult PathMonteCarloEngine::price(const ArithmeticAsianCall& instrument,
 
     if (config.num_threads == 1) {
         statistics =
-            simulate_worker(instrument, model, observations, config.seed, config.antithetic);
+            simulate_worker(instrument, model, observations, config.seed, config.batch_size,
+                            config.antithetic);
     } else {
         const auto worker_count = static_cast<std::size_t>(
             std::min<std::uint64_t>(observations, config.num_threads));
@@ -111,7 +135,8 @@ PricingResult PathMonteCarloEngine::price(const ArithmeticAsianCall& instrument,
                 try {
                     worker_statistics[worker_id] =
                         simulate_worker(instrument, model, worker_observations,
-                                        worker_seed(config.seed, worker_id), config.antithetic);
+                                        worker_seed(config.seed, worker_id), config.batch_size,
+                                        config.antithetic);
                 } catch (...) {
                     worker_errors[worker_id] = std::current_exception();
                 }

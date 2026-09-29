@@ -141,6 +141,27 @@ No analytical arithmetic-Asian reference is implemented in V1. Selecting
 `--method both` is requested, and the CLI states that the analytical reference
 is unavailable.
 
+## Batching and bounded memory
+
+Use `--batch-size N` to process at most `N` independent statistical
+observations per worker batch. In standard mode, one observation is one path;
+in antithetic mode, one observation is the average payoff from a path pair.
+`--batch-size 0` (the default) lets each worker process its assigned observations
+as one automatic batch.
+
+The RNG and normal-distribution state remain alive across batch boundaries, so
+batching does not restart or overlap random streams. Every batch updates local
+streaming statistics and is merged without retaining its payoffs. Asian paths
+also retain only the current price and running sum. The engine can therefore
+process millions of simulations without retaining all payoffs or complete
+paths in memory.
+
+On the documented development machine, a 10-million-path European run and a
+one-million-path, 252-step antithetic Asian run each measured 4,124 KiB peak
+resident memory. These process-level measurements and their exact commands are
+recorded in `results/memory_environment.md`; they are machine-specific rather
+than universal performance claims.
+
 Catch2 is discovered from the system when available. Otherwise, CMake fetches
 the pinned version declared in `CMakeLists.txt` during configuration.
 

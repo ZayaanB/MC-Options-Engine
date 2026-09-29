@@ -20,6 +20,7 @@ TEST_CASE("price CLI uses the canonical European call defaults", "[cli]") {
     REQUIRE(options.option.maturity == 1.0);
     REQUIRE(options.simulation.num_paths == 1'000'000);
     REQUIRE(options.simulation.num_threads == 1);
+    REQUIRE(options.simulation.batch_size == 0);
     REQUIRE(options.simulation.num_steps == 1);
     REQUIRE(options.simulation.seed == 42);
     REQUIRE_FALSE(options.simulation.antithetic);
@@ -36,6 +37,7 @@ TEST_CASE("price CLI parses market and simulation configuration", "[cli]") {
         std::string_view{"--maturity"},   std::string_view{"0.5"},
         std::string_view{"--paths"},      std::string_view{"5000000"},
         std::string_view{"--threads"},    std::string_view{"8"},
+        std::string_view{"--batch-size"}, std::string_view{"16384"},
         std::string_view{"--steps"},      std::string_view{"252"},
         std::string_view{"--seed"},       std::string_view{"123"},
         std::string_view{"--antithetic"},
@@ -51,6 +53,7 @@ TEST_CASE("price CLI parses market and simulation configuration", "[cli]") {
     REQUIRE(options.option.maturity == 0.5);
     REQUIRE(options.simulation.num_paths == 5'000'000);
     REQUIRE(options.simulation.num_threads == 8);
+    REQUIRE(options.simulation.batch_size == 16'384);
     REQUIRE(options.simulation.num_steps == 252);
     REQUIRE(options.simulation.seed == 123);
     REQUIRE(options.simulation.antithetic);
