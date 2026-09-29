@@ -34,6 +34,7 @@ Options:
   --maturity VALUE              Maturity in years (default: 1)
   --paths N                     Total Monte Carlo trajectories (default: 1000000)
   --threads N                   Worker threads (default: 1)
+  --batch-size N                Observations per worker batch (default: automatic)
   --steps N                     Monitoring steps for path simulation (default: 1)
   --seed N                      Unsigned RNG seed (default: 42)
   --antithetic                  Enable antithetic variates; paths must be even
@@ -91,6 +92,13 @@ void print_monte_carlo_result(const mc::PricingResult& result,
               << "Paths:                  " << result.paths << '\n'
               << "Observations:           " << result.observations << '\n'
               << "Threads:                " << options.simulation.num_threads << '\n'
+              << "Batch size:             ";
+    if (options.simulation.batch_size == 0) {
+        std::cout << "automatic\n";
+    } else {
+        std::cout << options.simulation.batch_size << " observations\n";
+    }
+    std::cout
               << "Steps:                  " << options.simulation.num_steps << '\n'
               << "Seed:                   " << options.simulation.seed << '\n'
               << "Antithetic:             "

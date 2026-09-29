@@ -102,6 +102,12 @@ PriceOptions parse_price_options(const std::span<const std::string_view> argumen
                 throw std::invalid_argument{"--threads is too large for this platform"};
             }
             options.simulation.num_threads = static_cast<std::size_t>(value);
+        } else if (argument == "--batch-size") {
+            const auto value = parse_unsigned(take_value(arguments, index, argument), argument);
+            if (value > std::numeric_limits<std::size_t>::max()) {
+                throw std::invalid_argument{"--batch-size is too large for this platform"};
+            }
+            options.simulation.batch_size = static_cast<std::size_t>(value);
         } else if (argument == "--steps") {
             const auto value = parse_unsigned(take_value(arguments, index, argument), argument);
             if (value > std::numeric_limits<std::size_t>::max()) {

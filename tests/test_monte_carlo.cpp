@@ -254,6 +254,43 @@ TEST_CASE("antithetic pairing reduces call estimator variance at equal path coun
     REQUIRE(paired.standard_error < standard.standard_error);
 }
 
+TEST_CASE("batched terminal simulation preserves the random stream and estimates",
+          "[monte-carlo][batch]") {
+    const mc::EuropeanCall call{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    auto unbatched_config = simulation_config(100'003);
+    unbatched_config.num_threads = 4;
+    auto batched_config = unbatched_config;
+    batched_config.batch_size = 127;
+
+    const auto unbatched = engine.price(call, kMarket, kOption, unbatched_config);
+    const auto batched = engine.price(call, kMarket, kOption, batched_config);
+    const auto repeated = engine.price(call, kMarket, kOption, batched_config);
+
+    REQUIRE(batched.paths == unbatched.paths);
+    REQUIRE(batched.observations == unbatched.observations);
+    REQUIRE(batched.price == Catch::Approx(unbatched.price).epsilon(1e-12));
+    REQUIRE(batched.sample_variance ==
+            Catch::Approx(unbatched.sample_variance).epsilon(1e-12));
+    REQUIRE(batched.price == repeated.price);
+    REQUIRE(batched.sample_variance == repeated.sample_variance);
+}
+
+TEST_CASE("batch size counts antithetic pair observations", "[monte-carlo][batch]") {
+    const mc::EuropeanPut put{kOption.strike};
+    const mc::MonteCarloEngine engine;
+    auto simulation = simulation_config(14);
+    simulation.antithetic = true;
+    simulation.batch_size = 2;
+
+    const auto result = engine.price(put, kMarket, kOption, simulation);
+
+    REQUIRE(result.paths == 14);
+    REQUIRE(result.observations == 7);
+    REQUIRE(std::isfinite(result.price));
+    REQUIRE(std::isfinite(result.standard_error));
+}
+
 TEST_CASE("engine rejects invalid configuration",
           "[monte-carlo][validation]") {
     const mc::EuropeanCall call{kOption.strike};

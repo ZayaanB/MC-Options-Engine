@@ -126,3 +126,25 @@ TEST_CASE("Asian path pricing validates steps and antithetic path counts",
     REQUIRE_THROWS_AS(engine.price(call, kMarket, kOption, simulation),
                       std::invalid_argument);
 }
+
+TEST_CASE("batched Asian simulation preserves paths and reproducibility",
+          "[asian][batch]") {
+    const mc::ArithmeticAsianCall call{kOption.strike};
+    const mc::PathMonteCarloEngine engine;
+    auto unbatched_config = config(20'003, 12);
+    unbatched_config.num_threads = 4;
+    auto batched_config = unbatched_config;
+    batched_config.batch_size = 31;
+
+    const auto unbatched = engine.price(call, kMarket, kOption, unbatched_config);
+    const auto batched = engine.price(call, kMarket, kOption, batched_config);
+    const auto repeated = engine.price(call, kMarket, kOption, batched_config);
+
+    REQUIRE(batched.paths == unbatched.paths);
+    REQUIRE(batched.observations == unbatched.observations);
+    REQUIRE(batched.price == Catch::Approx(unbatched.price).epsilon(1e-12));
+    REQUIRE(batched.sample_variance ==
+            Catch::Approx(unbatched.sample_variance).epsilon(1e-12));
+    REQUIRE(batched.price == repeated.price);
+    REQUIRE(batched.sample_variance == repeated.sample_variance);
+}
