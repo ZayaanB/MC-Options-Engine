@@ -42,15 +42,16 @@ RunningStatistics simulate_batch(const Instrument& instrument, const BlackSchole
                                  std::normal_distribution<double>& standard_normal,
                                  const bool antithetic) {
     RunningStatistics statistics;
+    const double discount_factor = model.discount_factor();
 
     for (std::uint64_t observation = 0; observation < observations; ++observation) {
         const double normal = standard_normal(random_engine);
         const double payoff = instrument.payoff(model.terminal_price(normal));
         if (antithetic) {
             const double opposite_payoff = instrument.payoff(model.terminal_price(-normal));
-            statistics.add(model.discount_factor() * 0.5 * (payoff + opposite_payoff));
+            statistics.add(discount_factor * 0.5 * (payoff + opposite_payoff));
         } else {
-            statistics.add(model.discount_factor() * payoff);
+            statistics.add(discount_factor * payoff);
         }
     }
     return statistics;

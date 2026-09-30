@@ -46,33 +46,36 @@ RunningStatistics simulate_batch(const ArithmeticAsianCall& instrument,
                                  std::normal_distribution<double>& standard_normal,
                                  const bool antithetic) {
     RunningStatistics statistics;
+    const double initial_price = model.initial_price();
+    const std::size_t num_steps = model.num_steps();
+    const double denominator = static_cast<double>(num_steps);
+    const double discount_factor = model.discount_factor();
 
     for (std::uint64_t observation = 0; observation < observations; ++observation) {
-        double price = model.initial_price();
+        double price = initial_price;
         double price_sum = 0.0;
 
         if (antithetic) {
-            double opposite_price = model.initial_price();
+            double opposite_price = initial_price;
             double opposite_price_sum = 0.0;
-            for (std::size_t step = 0; step < model.num_steps(); ++step) {
+            for (std::size_t step = 0; step < num_steps; ++step) {
                 const double normal = standard_normal(random_engine);
                 price = model.advance(price, normal);
                 opposite_price = model.advance(opposite_price, -normal);
                 price_sum += price;
                 opposite_price_sum += opposite_price;
             }
-            const double denominator = static_cast<double>(model.num_steps());
             const double paired_payoff =
                 0.5 * (instrument.payoff(price_sum / denominator) +
                        instrument.payoff(opposite_price_sum / denominator));
-            statistics.add(model.discount_factor() * paired_payoff);
+            statistics.add(discount_factor * paired_payoff);
         } else {
-            for (std::size_t step = 0; step < model.num_steps(); ++step) {
+            for (std::size_t step = 0; step < num_steps; ++step) {
                 price = model.advance(price, standard_normal(random_engine));
                 price_sum += price;
             }
-            const double average = price_sum / static_cast<double>(model.num_steps());
-            statistics.add(model.discount_factor() * instrument.payoff(average));
+            const double average = price_sum / denominator;
+            statistics.add(discount_factor * instrument.payoff(average));
         }
     }
     return statistics;

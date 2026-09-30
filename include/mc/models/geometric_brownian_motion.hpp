@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cmath>
 
 #include "mc/market_data.hpp"
 
@@ -13,12 +14,14 @@ public:
     GeometricBrownianMotion(const MarketData& market, double maturity,
                             std::size_t num_steps);
 
-    [[nodiscard]] double initial_price() const noexcept;
-    [[nodiscard]] double advance(double current_price,
-                                 double standard_normal) const noexcept;
-    [[nodiscard]] double time_step() const noexcept;
-    [[nodiscard]] std::size_t num_steps() const noexcept;
-    [[nodiscard]] double discount_factor() const noexcept;
+    [[nodiscard]] double initial_price() const noexcept { return initial_price_; }
+    [[nodiscard]] double advance(const double current_price,
+                                 const double standard_normal) const noexcept {
+        return current_price * std::exp(step_drift_ + step_diffusion_ * standard_normal);
+    }
+    [[nodiscard]] double time_step() const noexcept { return time_step_; }
+    [[nodiscard]] std::size_t num_steps() const noexcept { return num_steps_; }
+    [[nodiscard]] double discount_factor() const noexcept { return discount_factor_; }
 
 private:
     double initial_price_{};
