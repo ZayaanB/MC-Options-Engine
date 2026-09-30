@@ -206,6 +206,31 @@ The saved before/after data, environment, exact changes, and caveats are in
 `results/hot_loop_before.csv`, `results/hot_loop_after.csv`, and
 `results/optimization_environment.md`.
 
+## Final benchmark suite
+
+Generate all five standardized pricing and performance experiments, validate
+their CSV schemas and derived fields, and render the publication plots with:
+
+```bash
+./build/mc_final_benchmarks results/final
+.venv/bin/python python/plot_final_benchmarks.py
+```
+
+The suite uses the canonical at-the-money one-year call (`S = K = 100`,
+`r = 5%`, `sigma = 20%`) and fixed seed 42. It records three raw timing
+repetitions and their median for:
+
+- Monte Carlo convergence from 1,000 to 5,000,000 trajectories;
+- one- through eight-thread scaling at 5,000,000 trajectories;
+- standard versus antithetic estimation at equal total trajectory counts;
+- terminal European versus 252-step arithmetic Asian performance; and
+- finite-difference Delta, Gamma, and Vega accuracy against Black–Scholes.
+
+The generated CSVs and PNGs are committed under `results/final/`. Machine and
+toolchain details, experiment definitions, and interpretation caveats are in
+`results/final/environment.md`. These measurements describe this development
+laptop and are not universal performance claims.
+
 Catch2 is discovered from the system when available. Otherwise, CMake fetches
 the pinned version declared in `CMakeLists.txt` during configuration.
 
