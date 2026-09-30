@@ -14,7 +14,7 @@ void add_values(mc::RunningStatistics& statistics, const auto& values) {
     }
 }
 
-}  // namespace
+}
 
 TEST_CASE("Welford statistics match a hand-calculated sample", "[statistics]") {
     using Catch::Approx;

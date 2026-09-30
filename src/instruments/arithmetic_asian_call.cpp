@@ -12,4 +12,4 @@ double ArithmeticAsianCall::payoff(const double arithmetic_average) const noexce
 
 double ArithmeticAsianCall::strike() const noexcept { return strike_; }
 
-}  // namespace mc
+}

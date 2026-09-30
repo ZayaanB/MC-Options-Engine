@@ -24,4 +24,4 @@ struct PriceOptions {
 [[nodiscard]] std::string_view option_type_name(OptionType type) noexcept;
 [[nodiscard]] std::string_view pricing_method_name(PricingMethod method) noexcept;
 
-}  // namespace mc::cli
+}

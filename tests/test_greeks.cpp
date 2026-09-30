@@ -46,7 +46,7 @@ AnalyticalGreeks analytical_greeks() {
     };
 }
 
-}  // namespace
+}
 
 TEST_CASE("finite-difference call Greeks agree with analytical Black-Scholes Greeks",
           "[greeks]") {

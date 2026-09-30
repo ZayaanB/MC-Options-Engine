@@ -10,4 +10,4 @@ void validate(const MarketData& market);
 void validate(const OptionParameters& option);
 void validate(const SimulationConfig& config);
 
-}  // namespace mc
+}

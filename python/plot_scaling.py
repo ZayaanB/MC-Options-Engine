@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate measured scaling data and plot runtime, speedup, and throughput."""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate the final benchmark CSVs and generate publication-ready plots."""
 
 from __future__ import annotations

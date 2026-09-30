@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Independent Black-Scholes and Monte Carlo validation implementation."""
 
 from __future__ import annotations

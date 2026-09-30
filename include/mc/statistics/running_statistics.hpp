@@ -33,4 +33,4 @@ private:
     double m2_{};
 };
 
-}  // namespace mc
+}

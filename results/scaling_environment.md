@@ -1,23 +1,18 @@
-# Thread scaling benchmark environment
+# Thread scaling benchmark
 
-Measurements in `scaling.csv` were run on this development laptop on 2026-09-19.
-They are not universal performance claims.
+Measured on 2026-09-19. Results are machine-specific.
 
-| Component | Measured environment |
+| Environment | Value |
 | --- | --- |
-| CPU | Intel Core i9-13900H, 14 physical cores, 20 logical threads |
-| RAM | 31 GiB reported by the operating system |
-| OS | Linux Mint 22.3, Linux kernel 7.0.0-31-generic |
-| Compiler | GCC 14.3.0 (`/usr/bin/c++`) |
-| CMake | 3.28.3 |
-| Build | `Release`, `-O3 -DNDEBUG`, C++20 |
-| Plotting | Python 3.12.3, Matplotlib 3.11.2 |
+| CPU / RAM | Intel Core i9-13900H, 14 cores / 20 threads; 31 GiB |
+| OS | Linux Mint 22.3, kernel 7.0.0-31-generic |
+| Build | GCC 14.3.0, CMake 3.28.3, C++20 Release (`-O3 -DNDEBUG`) |
+| Plots | Python 3.12.3, Matplotlib 3.11.2 |
 
-Protocol: European call with spot 100, strike 100, continuously compounded rate
-5%, volatility 20%, and maturity one year. Each full configuration uses seed 42.
-The benchmark runs one 100,000-path warm-up, then three timed repetitions for
-each path count (1M, 5M, 10M) and available thread count (1, 2, 4, 8). The median
-runtime determines throughput, speedup, and efficiency. All raw runtimes remain
-in the CSV. The benchmark did not pin threads, isolate CPU cores, or control
-clock frequency and thermals; short-run measurements, particularly at 1M paths,
-can vary substantially.
+`scaling.csv` prices the standard one-year ATM European call (`S=K=100`,
+`r=5%`, `sigma=20%`, seed 42). After a 100K-path warm-up, each combination of
+1M, 5M, or 10M paths and 1, 2, 4, or 8 threads runs three times. The CSV keeps
+all runtimes and uses their median for throughput and speedup.
+
+Threads were not pinned, and CPU frequency, thermals, and background load were
+not controlled.

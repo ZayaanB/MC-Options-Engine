@@ -1,28 +1,20 @@
-# Batched simulation memory measurements
+# Batched simulation memory
 
-Measurements were collected on this development laptop on 2026-09-27 with
-GNU `/usr/bin/time -v`. They are process-level peak resident-set measurements,
-not universal memory guarantees.
+Measured on 2026-09-27 with `/usr/bin/time -v`. Results are process-level peak
+RSS on this machine, not memory guarantees.
 
-| Component | Measured environment |
+| Environment | Value |
 | --- | --- |
-| CPU | Intel Core i9-13900H, 14 physical cores, 20 logical threads |
-| RAM | 31 GiB reported by the operating system |
-| OS | Linux Mint 22.3, Linux kernel 7.0.0-31-generic |
-| Compiler | GCC 14.3.0 (`/usr/bin/c++`) |
-| CMake | 3.28.3 |
-| Build | `Release`, `-O3 -DNDEBUG`, C++20 |
-| Standard library | GCC 14.3.0 libstdc++ |
+| CPU / RAM | Intel Core i9-13900H, 14 cores / 20 threads; 31 GiB |
+| OS | Linux Mint 22.3, kernel 7.0.0-31-generic |
+| Build | GCC 14.3.0, CMake 3.28.3, C++20 Release (`-O3 -DNDEBUG`) |
 
-Both runs used eight worker threads, seed 42, and a batch size of 16,384
-independent statistical observations per worker.
+Both runs used eight threads, seed 42, and batches of 16,384 observations.
 
-| Instrument and workload | Peak RSS | Runtime reported by engine |
+| Workload | Peak RSS | Runtime |
 | --- | ---: | ---: |
-| European call, 10,000,000 standard paths | 4,124 KiB | 0.116 s |
-| Arithmetic Asian call, 1,000,000 antithetic paths, 252 steps | 4,124 KiB | 1.133 s |
-
-Commands:
+| European call, 10M paths | 4,124 KiB | 0.116 s |
+| Asian call, 1M antithetic paths, 252 steps | 4,124 KiB | 1.133 s |
 
 ```bash
 /usr/bin/time -v ./build/mcprice price --type call --method mc \
@@ -33,8 +25,5 @@ Commands:
   --seed 42 --antithetic
 ```
 
-The equal measured peak RSS despite very different path and time-step counts is
-consistent with the implementation: it stores thread-local RNG state, running
-statistics, and scalar path state, but retains neither payoff arrays nor full
-paths. Peak RSS can vary with the operating system, allocator, compiler, and
-measurement conditions.
+The engine stores worker-local RNG, statistics, and current path state—not
+payoff arrays or full paths. RSS may vary by OS, allocator, and compiler.

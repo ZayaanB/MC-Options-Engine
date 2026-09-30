@@ -39,7 +39,7 @@ constexpr mc::SimulationConfig simulation_config(const std::uint64_t paths = 100
     };
 }
 
-}  // namespace
+}
 
 TEST_CASE("Black-Scholes model evolves GBM and supplies discounting", "[model]") {
     using Catch::Approx;

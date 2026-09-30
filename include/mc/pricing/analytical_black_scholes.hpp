@@ -19,4 +19,4 @@ namespace mc {
 [[nodiscard]] double black_scholes_put(const MarketData& market,
                                        const OptionParameters& option);
 
-}  // namespace mc
+}

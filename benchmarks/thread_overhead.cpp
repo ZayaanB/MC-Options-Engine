@@ -46,7 +46,7 @@ double median_runtime(const mc::MonteCarloEngine& engine, const mc::EuropeanCall
     return runtimes[runtimes.size() / 2];
 }
 
-}  // namespace
+}
 
 int main(const int argc, const char* const argv[]) {
     try {

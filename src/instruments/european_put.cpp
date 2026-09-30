@@ -12,4 +12,4 @@ double EuropeanPut::payoff(const double terminal_price) const noexcept {
 
 double EuropeanPut::strike() const noexcept { return strike_; }
 
-}  // namespace mc
+}

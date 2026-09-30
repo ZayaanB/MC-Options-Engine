@@ -24,7 +24,7 @@ mc::SimulationConfig config(const std::uint64_t paths = 100'000,
     return {paths, 42, 1, 0, false, steps};
 }
 
-}  // namespace
+}
 
 TEST_CASE("arithmetic Asian call pays on the monitored arithmetic average", "[asian][payoff]") {
     const mc::ArithmeticAsianCall call{100.0};

@@ -1,58 +1,70 @@
 # Monte Carlo Options Pricing Engine
 
-A portable C++20 derivatives pricing and risk engine built around reproducible,
-multithreaded Monte Carlo simulation.
+**C++20 | Multithreaded | Monte Carlo | Options | Numerical Methods**
 
-> **Status:** Active development. The project foundation, core domain types,
-> European payoffs, analytical Black-Scholes pricing, and streaming statistics
-> are implemented. Single-threaded and multithreaded Monte Carlo pricing are available through
-> the engine API, validated against analytical reference values, and exercised
-> through a reproducible convergence experiment.
-
-Monte Carlo workers use independent, deterministic RNG streams and thread-local
-statistics; results are merged after all workers finish. The same full configuration
-reproduces an estimate on the same toolchain. Changing the thread count can change
-the random streams and numerical result, while estimates remain statistically
-consistent. `std::normal_distribution` does not guarantee bit-identical sequences
-across standard-library implementations.
-Custom instruments used with multiple threads must make `payoff()` safe for
-concurrent calls; the provided European instruments are immutable.
-
-Antithetic mode (`SimulationConfig::antithetic = true`) requires an even total
-trajectory count. Each generated normal draw `Z` produces two terminal prices
-from `Z` and `-Z`; their average discounted payoff is one independent statistical
-observation. Thus `PricingResult::paths` remains the requested trajectory count,
-while `PricingResult::observations` is half as large in antithetic mode. Its
-sample variance is across pair averages, and its standard error and 95% confidence
-interval use the pair count. In standard mode, paths and observations are equal.
-
-On Linux with GCC, the parallel tests can also be checked with ThreadSanitizer:
-
-```bash
-cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_CXX_FLAGS=-fsanitize=thread \
-  -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
-cmake --build build-tsan --target mc_tests
-./build-tsan/mc_tests --reporter compact
+```text
+Analytical Black-Scholes price: 10.450584
+Monte Carlo estimate:           10.447338
+95% confidence interval:        [10.438221, 10.456454]
+Paths:                          5000000
+Threads:                        8
+Runtime:                        0.047305 s
+Throughput:                     105.697121 M paths/s
 ```
 
-This project estimates derivative fair values under risk-neutral assumptions. It
-is not a trading system, stock-price predictor, signal generator, or execution
-engine.
+This is a small derivatives pricing and risk engine, not a trading system. It
+prices European calls and puts, simulates arithmetic Asian calls, and calculates
+Delta, Gamma, and Vega. The focus is correctness, bounded memory, reproducible
+experiments, and honest performance measurement.
 
-The current model assumes zero dividends, a flat continuously compounded
-risk-free rate, constant volatility, frictionless markets, and risk-neutral
-geometric Brownian motion.
+## Results
 
-## Build
+These numbers came from a Release build on an Intel Core i9-13900H laptop. The
+test case is a one-year at-the-money call with `S = K = 100`, `r = 5%`,
+`sigma = 20%`, and seed 42. Full details are in
+[`results/final/`](results/final/).
 
-Requirements:
+| Experiment | Result |
+| --- | ---: |
+| 5M-path price | 10.448002 vs 10.450584 Black–Scholes |
+| Absolute error / standard error | 0.002582 / 0.006584 |
+| Eight-thread throughput | 110.370M paths/s |
+| Eight-thread speedup | 4.486x |
+| Antithetic variance reduction | 2.002x |
+| 1M-path Greek relative errors | 0.055%–0.129% |
+| Peak RSS in documented large runs | 4,124 KiB |
 
-- A C++20 compiler
-- CMake 3.20 or newer
-- Network access during initial configuration when Catch2 is not already installed
+![Monte Carlo convergence](results/final/convergence.png)
 
-Configure, build, and test:
+![Thread scaling](results/final/scaling.png)
+
+![Antithetic variance reduction](results/final/variance_reduction.png)
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    CLI[CLI + validation] --> BS[Black-Scholes]
+    CLI --> MC[Monte Carlo engines]
+    PAYOFF[European and Asian payoffs] --> MC
+    MODEL[Risk-neutral GBM] --> MC
+    MC --> WORKERS[Thread-local RNG + statistics]
+    WORKERS --> RESULT[Price, SE, CI, runtime]
+    MC --> GREEKS[Finite-difference Greeks]
+```
+
+European options use an exact terminal GBM draw. Asian options use a separate
+path engine that keeps only the current price and running average. Each worker
+owns its random generator and Welford statistics, so there is no lock in the hot
+loop and no need to store every payoff or path.
+
+More detail: [architecture](docs/architecture.md) and
+[mathematics](docs/mathematics.md).
+
+## Build and test
+
+You need CMake 3.20+ and a C++20 compiler. Catch2 is downloaded on the first
+configure if it is not already installed.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -60,283 +72,95 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Show the CLI help:
+The normal build targets Linux and macOS. GitHub Actions builds and tests both.
 
-```bash
-./build/mcprice --help
-```
+## Run it
 
-Price a European call with analytical Black–Scholes and Monte Carlo (the default
-method for European options):
+European calls and puts default to analytical and Monte Carlo pricing together:
 
 ```bash
 ./build/mcprice price \
   --type call \
-  --spot 100 \
-  --strike 105 \
-  --rate 0.04 \
-  --volatility 0.25 \
-  --maturity 0.5 \
-  --paths 5000000 \
-  --threads 8 \
-  --seed 42 \
+  --spot 100 --strike 100 \
+  --rate 0.05 --volatility 0.20 --maturity 1 \
+  --paths 5000000 --threads 8 --seed 42 \
   --antithetic
 ```
 
-Use `--method mc`, `--method analytical`, or `--method both`. For `both`, the
-output includes the analytical price, Monte Carlo estimate, absolute difference,
-standard error, 95% confidence interval, runtime, and throughput. Negative
-interest rates, zero maturity, and zero volatility are valid. Non-finite values
-and invalid model inputs are rejected with a nonzero exit status.
-
-## Path simulation infrastructure
-
-`GeometricBrownianMotion` provides memory-efficient, equally spaced,
-risk-neutral GBM evolution. It precomputes the drift and diffusion for one time
-step and advances only the current price:
-
-```cpp
-mc::GeometricBrownianMotion model{market, maturity, config.num_steps};
-double current_price = model.initial_price();
-for (std::size_t step = 0; step < model.num_steps(); ++step) {
-    current_price = model.advance(current_price, standard_normal(rng));
-    // Consume current_price here; no complete path needs to be retained.
-}
-```
-
-For `M` steps, the post-step values occur at `jT/M` for `j = 1,...,M`.
-Consumers therefore observe maturity but not the initial spot unless they
-explicitly choose to do so. `SimulationConfig::num_steps` defaults to one and
-must be positive whenever path simulation is used. Terminal-only European
-pricing continues to sample its exact terminal distribution directly, so
-changing `--steps` does not change a European call or put result.
-
-## Arithmetic Asian call
-
-Price a discretely monitored arithmetic-average Asian call with Monte Carlo:
+Use `--method mc|analytical|both`. Asian calls use Monte Carlo because there is
+no analytical implementation:
 
 ```bash
 ./build/mcprice price \
   --type asian-call \
-  --spot 100 \
-  --strike 100 \
-  --rate 0.05 \
-  --volatility 0.20 \
-  --maturity 1 \
-  --paths 1000000 \
-  --threads 8 \
-  --steps 252 \
-  --seed 42 \
-  --antithetic
+  --spot 100 --strike 100 \
+  --rate 0.05 --volatility 0.20 --maturity 1 \
+  --paths 1000000 --threads 8 --steps 252 \
+  --batch-size 50000 --seed 42 --antithetic
 ```
 
-For `M` monitoring steps, the arithmetic average uses prices at `jT/M` for
-`j = 1,...,M`: the initial spot is excluded and maturity is included. Each
-worker retains only its current price and running sum, rather than an `N`-by-`M`
-path matrix. Antithetic mode evolves `Z` and `-Z` paths together and treats the
-pair-average payoff as one independent observation.
+Run `./build/mcprice --help` for every option. Bad and non-finite inputs return a
+clear error and a nonzero exit code.
 
-No analytical arithmetic-Asian reference is implemented in V1. Selecting
-`asian-call` therefore uses Monte Carlo even if `--method analytical` or
-`--method both` is requested, and the CLI states that the analytical reference
-is unavailable.
+## Method
 
-## Batching and bounded memory
+Under risk-neutral Black–Scholes dynamics,
 
-Use `--batch-size N` to process at most `N` independent statistical
-observations per worker batch. In standard mode, one observation is one path;
-in antithetic mode, one observation is the average payoff from a path pair.
-`--batch-size 0` (the default) lets each worker process its assigned observations
-as one automatic batch.
-
-The RNG and normal-distribution state remain alive across batch boundaries, so
-batching does not restart or overlap random streams. Every batch updates local
-streaming statistics and is merged without retaining its payoffs. Asian paths
-also retain only the current price and running sum. The engine can therefore
-process millions of simulations without retaining all payoffs or complete
-paths in memory.
-
-On the documented development machine, a 10-million-path European run and a
-one-million-path, 252-step antithetic Asian run each measured 4,124 KiB peak
-resident memory. These process-level measurements and their exact commands are
-recorded in `results/memory_environment.md`; they are machine-specific rather
-than universal performance claims.
-
-## Performance profiling
-
-Build and run the portable thread-overhead profile with:
-
-```bash
-./build/mc_thread_overhead results/thread_overhead.csv
+```math
+S_T=S_0\exp\left((r-\tfrac12\sigma^2)T+\sigma\sqrt{T}Z\right),
+\qquad Z\sim N(0,1).
 ```
 
-The Day 18 Callgrind profile attributes 46.42% of retired instructions to
-normal generation and 29.07% to terminal-price evolution, including `exp`, for
-the measured single-thread European workload. Streaming-statistics updates
-account for 9.14% and payoff evaluation for 4.57%. These are instruction shares,
-not elapsed-time percentages.
+For discounted payoffs `X_i`, the engine reports
 
-The same profiling pass found that eight-thread setup is counterproductive for
-tiny workloads but produces approximately 3.99x speedup at one million paths on
-the development machine. Exact commands, limitations, raw thread measurements,
-and the environment are documented in `results/profile_environment.md` and
-`results/thread_overhead.csv`. No optimization is included in this profiling
-milestone; Day 19 changes should be justified and measured against this baseline.
-
-## Profile-guided optimization
-
-The Day 19 pass exposed small scalar model and Welford-update methods to compiler
-inlining and cached loop-invariant discount and path values. It did not change
-the RNG, formulas, worker streams, or statistical definitions.
-
-On the development machine, the 10-million-path median improved from 23.619M to
-24.379M paths/s on one thread (+3.218%) and from 112.697M to 129.211M paths/s
-with eight threads (+14.654%). Prices and standard errors remained bit-identical.
-Callgrind retired instructions decreased by approximately 6.645%. The
-multithreaded result is more sensitive to scheduling and CPU-frequency noise;
-the single-thread measurement is the primary hot-loop comparison.
-
-Reproduce the benchmark with:
-
-```bash
-./build/mc_hot_loop results/hot_loop.csv
+```math
+\hat V=\frac1n\sum X_i,
+\qquad SE=\frac{s}{\sqrt n},
+\qquad CI_{95\%}=\hat V\pm1.96SE.
 ```
 
-The saved before/after data, environment, exact changes, and caveats are in
-`results/hot_loop_before.csv`, `results/hot_loop_after.csv`, and
-`results/optimization_environment.md`.
+Antithetic mode averages the payoffs from `Z` and `-Z` and treats that pair as
+one independent observation. Asian monitoring uses `jT/M`, `j = 1,...,M`, so it
+excludes today's spot and includes maturity. Greeks use central differences with
+common random numbers. Vega is reported per one volatility percentage point.
 
-## Final benchmark suite
-
-Generate all five standardized pricing and performance experiments, validate
-their CSV schemas and derived fields, and render the publication plots with:
-
-```bash
-./build/mc_final_benchmarks results/final
-.venv/bin/python python/plot_final_benchmarks.py
-```
-
-The suite uses the canonical at-the-money one-year call (`S = K = 100`,
-`r = 5%`, `sigma = 20%`) and fixed seed 42. It records three raw timing
-repetitions and their median for:
-
-- Monte Carlo convergence from 1,000 to 5,000,000 trajectories;
-- one- through eight-thread scaling at 5,000,000 trajectories;
-- standard versus antithetic estimation at equal total trajectory counts;
-- terminal European versus 252-step arithmetic Asian performance; and
-- finite-difference Delta, Gamma, and Vega accuracy against Black–Scholes.
-
-The generated CSVs and PNGs are committed under `results/final/`. Machine and
-toolchain details, experiment definitions, and interpretation caveats are in
-`results/final/environment.md`. These measurements describe this development
-laptop and are not universal performance claims.
-
-Catch2 is discovered from the system when available. Otherwise, CMake fetches
-the pinned version declared in `CMakeLists.txt` during configuration.
-
-## Independent Python validation
-
-The Python validator implements Black-Scholes with SciPy and Monte Carlo with
-NumPy, independently of the C++ engine:
+## Reproduce the plots
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r python/requirements.txt
-.venv/bin/python python/validate_black_scholes.py
+./build/mc_final_benchmarks results/final
+.venv/bin/python python/plot_final_benchmarks.py
 ```
 
-It reports analytical call/put prices, Monte Carlo estimates, standard errors,
-and normalized errors for the canonical scenario.
+The Python script checks the CSV calculations before plotting them. An
+independent NumPy/SciPy check is available in `python/validate_black_scholes.py`.
 
-## Convergence experiment
+## Assumptions and limits
 
-Generate measured convergence data and plots:
+- Zero dividends, flat continuous rates, constant volatility, and risk-neutral
+  geometric Brownian motion.
+- European calls and puts plus one discretely monitored arithmetic Asian call.
+- No early exercise, stochastic volatility, jumps, calibration, portfolios, or
+  execution.
+- Confidence intervals cover Monte Carlo sampling error, not model risk.
+- Greeks also contain finite-difference bump error.
+- Fixed configurations reproduce on the same implementation and toolchain.
+  Different thread counts or standard libraries may produce different random
+  streams but should remain statistically consistent.
+- Benchmarks describe one laptop without CPU pinning or thermal control.
 
-```bash
-./build/mc_convergence results/convergence.csv
-.venv/bin/python python/plot_convergence.py
+Likely next steps are thread-count-independent streams, Greek confidence
+intervals, more variance-reduction methods, and broader CI coverage.
+
+## Layout
+
+```text
+include/mc/  Public C++ interfaces
+src/         Engine and CLI implementation
+tests/       Catch2 tests
+benchmarks/  C++ experiments
+python/      Validation and plots
+results/     Raw data and measured environments
+docs/        Architecture and mathematics
 ```
-
-The experiment prices the canonical European call with 1,000 through 5,000,000
-paths using a fixed seed. It records the Monte Carlo estimate, analytical price,
-absolute error, standard error, and runtime. The plotting script creates:
-
-- `results/convergence_price.png`
-- `results/convergence_error.png`
-
-## Thread scaling benchmark
-
-Run three timed repetitions for each combination of 1M, 5M, and 10M paths with
-1, 2, 4, and 8 threads, subject to reported hardware concurrency:
-
-```bash
-./build/mc_scaling results/scaling.csv
-.venv/bin/python python/plot_scaling.py
-```
-
-The CSV keeps all three raw runtimes and their median. Throughput uses the median
-runtime; speedup is the one-thread median divided by the corresponding thread
-count's median, and parallel efficiency is speedup divided by thread count.
-Results are specific to the measured development machine and are not universal
-performance claims. Hardware and build details are recorded in
-`results/scaling_environment.md`.
-
-## Antithetic variance benchmark
-
-Compare standard and antithetic European-call Monte Carlo with the same total
-trajectory counts (1M and 5M), fixed seed, and 1, 2, or 4 threads when available:
-
-```bash
-./build/mc_antithetic results/antithetic.csv
-```
-
-Each configuration is timed three times. The CSV includes sample variance,
-estimator variance (`standard_error²`), standard error, raw runtimes, and median
-runtime. Compare **estimator variance**, not raw sample variance: one antithetic
-observation averages two trajectories. Equal trajectory counts do not imply equal
-normal-generator work—the antithetic version draws half as many normals. Results
-are specific to the recorded development-machine environment.
-The measurements and environment are in `results/antithetic.csv` and
-`results/antithetic_environment.md`. For this European-call scenario, the
-measured estimator variance was approximately halved at equal total paths.
-
-## Finite-difference Greeks
-
-`GreeksEngine` calculates Delta, Gamma, and Vega through central finite
-differences around Monte Carlo prices. The default absolute spot bump is 1% of
-the current spot and the default absolute volatility bump is `0.01`; both are
-configurable through `GreeksConfig`. Vega is reported as the price change per
-one volatility percentage point, so the derivative with respect to unit
-volatility is multiplied by `0.01` before it is returned.
-
-Central differences require the down-bumped inputs to remain in the model
-domain. The spot bump must be positive and smaller than spot, and the volatility
-bump must be positive and no greater than current volatility. Therefore, while
-pricing supports zero volatility, central-difference Vega is not defined at
-zero volatility with a positive symmetric bump.
-
-All bumped valuations deliberately reuse the identical `SimulationConfig`.
-Because the Monte Carlo engine reproduces its Gaussian streams for an identical
-full configuration, `V(S+h)`, `V(S)`, `V(S-h)`, and the volatility bumps are
-driven by common random numbers. This preserves correlation between valuations
-and reduces the sampling noise in their finite differences.
-
-Compare common and independent random numbers for the central-difference Delta
-at the same path budget with:
-
-```bash
-./build/mc_greeks_variance results/greeks_variance.csv
-```
-
-The experiment reports the sample variance of 100 independently replicated
-Delta estimates for each method. The common and independent methods each run
-two 50,000-path prices per replication; only the seed coupling differs.
-Measured data and the machine configuration are recorded in
-`results/greeks_variance.csv` and `results/greeks_variance_environment.md`. In
-the recorded at-the-money call experiment, common random numbers reduced the
-sample variance by approximately 419.6x; that factor is scenario-specific.
-
-## Platform targets
-
-The engine, CLI, tests, and standard benchmarks target Linux and macOS. The
-implementation requires no GPU or platform-specific numerical runtime.

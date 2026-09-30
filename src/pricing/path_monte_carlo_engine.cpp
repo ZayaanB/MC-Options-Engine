@@ -104,7 +104,7 @@ RunningStatistics simulate_worker(const ArithmeticAsianCall& instrument,
     return statistics;
 }
 
-}  // namespace
+}
 
 PricingResult PathMonteCarloEngine::price(const ArithmeticAsianCall& instrument,
                                           const MarketData& market,
@@ -172,4 +172,4 @@ PricingResult PathMonteCarloEngine::price(const ArithmeticAsianCall& instrument,
     };
 }
 
-}  // namespace mc
+}

@@ -18,7 +18,7 @@ void validate_bump(const double bump, const char* const name) {
     }
 }
 
-}  // namespace
+}
 
 GreeksResult GreeksEngine::calculate(const Instrument& instrument, const MarketData& market,
                                      const OptionParameters& option,
@@ -51,10 +51,6 @@ GreeksResult GreeksEngine::calculate(const Instrument& instrument, const MarketD
                                      market.volatility - volatility_bump};
 
     const MonteCarloEngine pricing_engine;
-    // Reuse the identical full simulation configuration for every valuation.
-    // MonteCarloEngine is deterministic for that configuration, so each price
-    // consumes the same Gaussian stream. This common-random-number coupling is
-    // what makes differences between bumped prices substantially less noisy.
     const double price = pricing_engine.price(instrument, market, option, simulation).price;
     const double price_spot_up =
         pricing_engine.price(instrument, spot_up, option, simulation).price;
@@ -75,4 +71,4 @@ GreeksResult GreeksEngine::calculate(const Instrument& instrument, const MarketD
     };
 }
 
-}  // namespace mc
+}

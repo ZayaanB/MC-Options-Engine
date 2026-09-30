@@ -1,28 +1,18 @@
-# Antithetic benchmark environment
+# Antithetic benchmark
 
-Measurements in `antithetic.csv` were run on this development laptop on
-2026-09-20. These measurements are not universal performance claims.
+Measured on 2026-09-20. Results are machine-specific.
 
-| Component | Measured environment |
+| Environment | Value |
 | --- | --- |
-| CPU | Intel Core i9-13900H, 14 physical cores, 20 logical threads |
-| RAM | 31 GiB reported by the operating system |
-| OS | Linux Mint 22.3, Linux kernel 7.0.0-31-generic |
-| Compiler | GCC 14.3.0 (`/usr/bin/c++`) |
-| CMake | 3.28.3 |
-| Build | `Release`, `-O3 -DNDEBUG`, C++20 |
-| Standard library | GCC 14.3.0 libstdc++ |
+| CPU / RAM | Intel Core i9-13900H, 14 cores / 20 threads; 31 GiB |
+| OS | Linux Mint 22.3, kernel 7.0.0-31-generic |
+| Build | GCC 14.3.0, CMake 3.28.3, C++20 Release (`-O3 -DNDEBUG`) |
 
-Protocol: European call with spot 100, strike 100, continuously compounded rate
-5%, volatility 20%, and maturity one year. Standard and antithetic runs each
-price 1M or 5M total trajectories using seed 42 and 1, 2, or 4 threads. Both
-code paths receive a 100,000-trajectory warm-up. Each full configuration runs
-three times; the CSV preserves all runtimes and their median. No CPU pinning,
-thermal control, or isolated load was used, so runtime comparisons are noisy.
+`antithetic.csv` compares standard and antithetic pricing for the one-year ATM
+European call (`S=K=100`, `r=5%`, `sigma=20%`, seed 42). Both methods use the
+same total trajectory counts, 1M or 5M, with 1, 2, or 4 threads. Each full
+configuration runs three times after a 100K-path warm-up.
 
-The fair comparison of estimation uncertainty is `estimator_variance` (the
-square of the reported standard error). Antithetic mode forms one observation
-from each pair and therefore has half as many observations at the same total
-trajectory count. It also uses half as many normal draws. Here, its estimator
-variance was approximately 2x lower across measured configurations. This is a
-property of this call scenario, not a guarantee for other payoffs or inputs.
+Compare estimator variance (`standard_error²`), not raw sample variance. An
+antithetic pair is one observation and uses one normal draw. In this test it cut
+estimator variance by about 2x; that result is specific to this payoff and setup.

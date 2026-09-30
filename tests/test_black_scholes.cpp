@@ -19,7 +19,7 @@ constexpr double kRate = 0.05;
 constexpr double kVolatility = 0.20;
 constexpr double kMaturity = 1.0;
 
-}  // namespace
+}
 
 TEST_CASE("standard normal CDF has expected values and symmetry", "[black-scholes][cdf]") {
     using Catch::Approx;

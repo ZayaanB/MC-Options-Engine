@@ -295,7 +295,7 @@ void run_greeks_accuracy(const std::filesystem::path& output_dir,
     std::cout << "E/5 Greeks accuracy -> " << output_dir / "greeks_accuracy.csv" << '\n';
 }
 
-}  // namespace
+}
 
 int main(const int argc, const char* const argv[]) {
     try {

@@ -18,4 +18,4 @@ public:
                                          const GreeksConfig& config = {}) const;
 };
 
-}  // namespace mc
+}
