@@ -85,6 +85,11 @@ target_compile_features(mc_hot_loop PRIVATE cxx_std_20)
 target_link_libraries(mc_hot_loop PRIVATE mcpricing)
 mc_enable_warnings(mc_hot_loop)
 
+add_executable(mc_final_benchmarks benchmarks/final_suite.cpp)
+target_compile_features(mc_final_benchmarks PRIVATE cxx_std_20)
+target_link_libraries(mc_final_benchmarks PRIVATE mcpricing)
+mc_enable_warnings(mc_final_benchmarks)
+
 include(CTest)
 
 if(BUILD_TESTING)
