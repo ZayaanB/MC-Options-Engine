@@ -75,6 +75,16 @@ target_compile_features(mc_greeks_variance PRIVATE cxx_std_20)
 target_link_libraries(mc_greeks_variance PRIVATE mcpricing)
 mc_enable_warnings(mc_greeks_variance)
 
+add_executable(mc_thread_overhead benchmarks/thread_overhead.cpp)
+target_compile_features(mc_thread_overhead PRIVATE cxx_std_20)
+target_link_libraries(mc_thread_overhead PRIVATE mcpricing)
+mc_enable_warnings(mc_thread_overhead)
+
+add_executable(mc_hot_loop benchmarks/hot_loop.cpp)
+target_compile_features(mc_hot_loop PRIVATE cxx_std_20)
+target_link_libraries(mc_hot_loop PRIVATE mcpricing)
+mc_enable_warnings(mc_hot_loop)
+
 include(CTest)
 
 if(BUILD_TESTING)

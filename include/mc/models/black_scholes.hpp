@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include "mc/market_data.hpp"
 
 namespace mc {
@@ -8,8 +10,10 @@ class BlackScholesModel {
 public:
     BlackScholesModel(const MarketData& market, double maturity) noexcept;
 
-    [[nodiscard]] double terminal_price(double standard_normal) const noexcept;
-    [[nodiscard]] double discount_factor() const noexcept;
+    [[nodiscard]] double terminal_price(const double standard_normal) const noexcept {
+        return spot_ * std::exp(drift_ + diffusion_ * standard_normal);
+    }
+    [[nodiscard]] double discount_factor() const noexcept { return discount_factor_; }
 
 private:
     double spot_;

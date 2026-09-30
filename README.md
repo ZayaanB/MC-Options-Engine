@@ -162,6 +162,50 @@ resident memory. These process-level measurements and their exact commands are
 recorded in `results/memory_environment.md`; they are machine-specific rather
 than universal performance claims.
 
+## Performance profiling
+
+Build and run the portable thread-overhead profile with:
+
+```bash
+./build/mc_thread_overhead results/thread_overhead.csv
+```
+
+The Day 18 Callgrind profile attributes 46.42% of retired instructions to
+normal generation and 29.07% to terminal-price evolution, including `exp`, for
+the measured single-thread European workload. Streaming-statistics updates
+account for 9.14% and payoff evaluation for 4.57%. These are instruction shares,
+not elapsed-time percentages.
+
+The same profiling pass found that eight-thread setup is counterproductive for
+tiny workloads but produces approximately 3.99x speedup at one million paths on
+the development machine. Exact commands, limitations, raw thread measurements,
+and the environment are documented in `results/profile_environment.md` and
+`results/thread_overhead.csv`. No optimization is included in this profiling
+milestone; Day 19 changes should be justified and measured against this baseline.
+
+## Profile-guided optimization
+
+The Day 19 pass exposed small scalar model and Welford-update methods to compiler
+inlining and cached loop-invariant discount and path values. It did not change
+the RNG, formulas, worker streams, or statistical definitions.
+
+On the development machine, the 10-million-path median improved from 23.619M to
+24.379M paths/s on one thread (+3.218%) and from 112.697M to 129.211M paths/s
+with eight threads (+14.654%). Prices and standard errors remained bit-identical.
+Callgrind retired instructions decreased by approximately 6.645%. The
+multithreaded result is more sensitive to scheduling and CPU-frequency noise;
+the single-thread measurement is the primary hot-loop comparison.
+
+Reproduce the benchmark with:
+
+```bash
+./build/mc_hot_loop results/hot_loop.csv
+```
+
+The saved before/after data, environment, exact changes, and caveats are in
+`results/hot_loop_before.csv`, `results/hot_loop_after.csv`, and
+`results/optimization_environment.md`.
+
 Catch2 is discovered from the system when available. Otherwise, CMake fetches
 the pinned version declared in `CMakeLists.txt` during configuration.
 
