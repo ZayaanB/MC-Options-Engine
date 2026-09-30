@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Plot Monte Carlo price and error convergence from the C++ experiment CSV."""
 
 from __future__ import annotations

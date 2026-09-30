@@ -8,4 +8,4 @@ struct MarketData {
     double volatility{};
 };
 
-}  // namespace mc
+}

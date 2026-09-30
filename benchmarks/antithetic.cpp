@@ -71,7 +71,7 @@ void write_row(std::ofstream& output, const std::uint64_t paths, const std::size
     output << ',' << measurement.median_runtime << '\n';
 }
 
-}  // namespace
+}
 
 int main(const int argc, const char* const argv[]) {
     try {

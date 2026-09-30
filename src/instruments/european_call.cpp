@@ -12,4 +12,4 @@ double EuropeanCall::payoff(const double terminal_price) const noexcept {
 
 double EuropeanCall::strike() const noexcept { return strike_; }
 
-}  // namespace mc
+}

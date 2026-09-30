@@ -15,7 +15,7 @@ namespace {
 
 constexpr mc::MarketData kMarket{100.0, 0.05, 0.20};
 
-}  // namespace
+}
 
 TEST_CASE("one GBM step agrees with terminal Black-Scholes evolution", "[path][model]") {
     constexpr double maturity = 1.25;

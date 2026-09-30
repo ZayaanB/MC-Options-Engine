@@ -24,7 +24,6 @@ void validate_inputs(const MarketData& market, const OptionParameters& option,
     validate(config);
 }
 
-// Preserve the original stream for one-thread runs; mix additional worker seeds.
 std::uint64_t worker_seed(const std::uint64_t seed, const std::size_t worker_id) noexcept {
     if (worker_id == 0) {
         return seed;
@@ -78,7 +77,7 @@ RunningStatistics simulate_worker(const Instrument& instrument, const BlackSchol
     return statistics;
 }
 
-}  // namespace
+}
 
 PricingResult MonteCarloEngine::price(const Instrument& instrument, const MarketData& market,
                                       const OptionParameters& option,
@@ -96,7 +95,6 @@ PricingResult MonteCarloEngine::price(const Instrument& instrument, const Market
         statistics = simulate_worker(instrument, model, observations, config.seed,
                                      config.batch_size, config.antithetic);
     } else {
-        // An antithetic pair is indivisible and is assigned to one worker.
         const auto worker_count = static_cast<std::size_t>(
             std::min<std::uint64_t>(observations, config.num_threads));
         const auto base_observations = observations / worker_count;
@@ -148,4 +146,4 @@ PricingResult MonteCarloEngine::price(const Instrument& instrument, const Market
     };
 }
 
-}  // namespace mc
+}

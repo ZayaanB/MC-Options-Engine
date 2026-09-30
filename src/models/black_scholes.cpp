@@ -10,4 +10,4 @@ BlackScholesModel::BlackScholesModel(const MarketData& market, const double matu
       diffusion_{market.volatility * std::sqrt(maturity)},
       discount_factor_{std::exp(-market.risk_free_rate * maturity)} {}
 
-}  // namespace mc
+}

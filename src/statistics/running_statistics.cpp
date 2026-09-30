@@ -12,7 +12,7 @@ constexpr double undefined_statistic() noexcept {
     return std::numeric_limits<double>::quiet_NaN();
 }
 
-}  // namespace
+}
 
 void RunningStatistics::merge(const RunningStatistics& other) {
     if (other.empty()) {
@@ -61,4 +61,4 @@ double RunningStatistics::standard_error() const noexcept {
     return std::sqrt(variance() / static_cast<double>(count_));
 }
 
-}  // namespace mc
+}

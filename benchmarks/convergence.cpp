@@ -35,7 +35,7 @@ constexpr std::array<std::uint64_t, 5> kPathCounts{
     5'000'000,
 };
 
-}  // namespace
+}
 
 int main(const int argc, const char* const argv[]) {
     try {

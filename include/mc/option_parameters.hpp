@@ -7,4 +7,4 @@ struct OptionParameters {
     double maturity{};
 };
 
-}  // namespace mc
+}

@@ -30,4 +30,4 @@ GeometricBrownianMotion::GeometricBrownianMotion(const MarketData& market,
     discount_factor_ = std::exp(-market.risk_free_rate * maturity);
 }
 
-}  // namespace mc
+}

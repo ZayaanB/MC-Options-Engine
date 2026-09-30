@@ -14,7 +14,7 @@ void require_finite(const double value, const std::string_view name) {
     }
 }
 
-}  // namespace
+}
 
 void validate(const MarketData& market) {
     require_finite(market.spot, "spot");
@@ -53,4 +53,4 @@ void validate(const SimulationConfig& config) {
     }
 }
 
-}  // namespace mc
+}

@@ -70,7 +70,7 @@ private:
     mutable std::array<std::uint64_t, 8> counts_{};
 };
 
-}  // namespace
+}
 
 TEST_CASE("four workers price a call within statistical uncertainty", "[monte-carlo][threads]") {
     const mc::EuropeanCall call{kOption.strike};

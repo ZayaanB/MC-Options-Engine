@@ -15,4 +15,4 @@ private:
     double strike_;
 };
 
-}  // namespace mc
+}

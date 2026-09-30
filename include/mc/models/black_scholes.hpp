@@ -22,4 +22,4 @@ private:
     double discount_factor_;
 };
 
-}  // namespace mc
+}

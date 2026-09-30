@@ -14,4 +14,4 @@ struct SimulationConfig {
     std::size_t num_steps{1};
 };
 
-}  // namespace mc
+}

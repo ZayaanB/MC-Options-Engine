@@ -1,5 +1,6 @@
 #include "mc/cli/price_options.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
@@ -7,7 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
-#include <unordered_set>
+#include <vector>
 
 namespace mc::cli {
 namespace {
@@ -40,11 +41,12 @@ std::string_view take_value(const std::span<const std::string_view> arguments,
     return arguments[index];
 }
 
-}  // namespace
+}
 
 PriceOptions parse_price_options(const std::span<const std::string_view> arguments) {
     PriceOptions options;
-    std::unordered_set<std::string_view> seen;
+    std::vector<std::string_view> seen;
+    seen.reserve(arguments.size());
 
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const std::string_view argument = arguments[index];
@@ -52,9 +54,10 @@ PriceOptions parse_price_options(const std::span<const std::string_view> argumen
             throw std::invalid_argument{"unexpected positional argument: " +
                                         std::string{argument}};
         }
-        if (!seen.insert(argument).second) {
+        if (std::find(seen.begin(), seen.end(), argument) != seen.end()) {
             throw std::invalid_argument{"duplicate option: " + std::string{argument}};
         }
+        seen.push_back(argument);
 
         if (argument == "--antithetic") {
             options.simulation.antithetic = true;
@@ -148,4 +151,4 @@ std::string_view pricing_method_name(const PricingMethod method) noexcept {
     return "unknown";
 }
 
-}  // namespace mc::cli
+}

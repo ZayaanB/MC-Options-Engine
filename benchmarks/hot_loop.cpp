@@ -22,7 +22,7 @@ constexpr std::uint64_t kPaths = 10'000'000;
 constexpr std::size_t kRepetitions = 9;
 constexpr std::array<std::size_t, 2> kThreadCounts{1, 8};
 
-}  // namespace
+}
 
 int main(const int argc, const char* const argv[]) {
     try {

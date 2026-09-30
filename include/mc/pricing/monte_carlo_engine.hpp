@@ -15,4 +15,4 @@ public:
                                       const SimulationConfig& config) const;
 };
 
-}  // namespace mc
+}

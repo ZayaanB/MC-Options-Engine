@@ -46,7 +46,7 @@ ExperimentResult run_experiment(DeltaEstimator&& estimate_delta) {
     };
 }
 
-}  // namespace
+}
 
 int main(const int argc, const char* const argv[]) {
     try {

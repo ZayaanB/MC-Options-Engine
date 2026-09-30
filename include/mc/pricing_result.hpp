@@ -16,4 +16,4 @@ struct PricingResult {
     double paths_per_second{};
 };
 
-}  // namespace mc
+}

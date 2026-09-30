@@ -58,7 +58,7 @@ AnalyticalPrices calculate_prices(const double spot, const double strike, const 
     };
 }
 
-}  // namespace
+}
 
 double standard_normal_cdf(const double value) noexcept {
     return 0.5 * std::erfc(-value / std::sqrt(2.0));
@@ -84,4 +84,4 @@ double black_scholes_put(const MarketData& market, const OptionParameters& optio
                              market.volatility, option.maturity);
 }
 
-}  // namespace mc
+}

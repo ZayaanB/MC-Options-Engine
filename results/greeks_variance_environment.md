@@ -1,28 +1,18 @@
-# Common-random-number Greeks benchmark environment
+# Common-random-number Greek benchmark
 
-Measurements in `greeks_variance.csv` were run on this development laptop on
-2026-09-22. These measurements are not universal performance claims.
+Measured on 2026-09-22. Results are machine-specific.
 
-| Component | Measured environment |
+| Environment | Value |
 | --- | --- |
-| CPU | Intel Core i9-13900H, 14 physical cores, 20 logical threads |
-| RAM | 31 GiB reported by the operating system |
-| OS | Linux Mint 22.3, Linux kernel 7.0.0-31-generic |
-| Compiler | GCC 14.3.0 (`/usr/bin/c++`) |
-| CMake | 3.28.3 |
-| Build | `Release`, `-O3 -DNDEBUG`, C++20 |
-| Standard library | GCC 14.3.0 libstdc++ |
+| CPU / RAM | Intel Core i9-13900H, 14 cores / 20 threads; 31 GiB |
+| OS | Linux Mint 22.3, kernel 7.0.0-31-generic |
+| Build | GCC 14.3.0, CMake 3.28.3, C++20 Release (`-O3 -DNDEBUG`) |
 
-Protocol: central-difference Delta for a European call with spot 100, strike
-100, continuously compounded rate 5%, volatility 20%, maturity one year, and
-an absolute spot bump of 1. Each method runs 100 replications. Every replication
-uses two 50,000-path single-threaded prices, so both methods have the same total
-trajectory budget. Replication seeds begin at 42. The common method gives the up
-and down valuations the same seed; the independent method offsets the down seed.
+The test estimates central-difference Delta for the one-year ATM call with a
+spot bump of 1. Each method runs 100 replications using two 50K-path prices per
+replication. Common random numbers reuse the seed for both bumps; the comparison
+uses independent seeds.
 
-The measured sample variance across Delta estimates was
-`6.6856155900127665e-06` with common random numbers and
-`0.0028051238670599929` with independent random numbers, a variance ratio of
-approximately 419.6. This magnitude is specific to this option, bump, path
-count, pseudorandom generator implementation, and machine experiment; it is not
-a universal reduction factor.
+Delta variance was `6.6856e-06` with common streams and `0.0028051` with
+independent streams, a 419.6x reduction. That factor depends on the option,
+bump, path count, and RNG implementation.

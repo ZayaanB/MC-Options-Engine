@@ -67,7 +67,7 @@ Measurement measure(const mc::MonteCarloEngine& engine, const mc::EuropeanCall& 
     return measurement;
 }
 
-}  // namespace
+}
 
 int main(const int argc, const char* const argv[]) {
     try {
@@ -83,7 +83,6 @@ int main(const int argc, const char* const argv[]) {
         const mc::EuropeanCall call{kOption.strike};
         const mc::MonteCarloEngine engine;
 
-        // Warm the code path before collecting timed runs.
         const mc::SimulationConfig warmup{100'000, 42, 1, 0, false};
         (void)engine.price(call, kMarket, kOption, warmup);
 

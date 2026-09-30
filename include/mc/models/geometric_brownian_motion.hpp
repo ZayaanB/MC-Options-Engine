@@ -7,8 +7,6 @@
 
 namespace mc {
 
-// Stateless, constant-memory evolution for equally spaced risk-neutral GBM steps.
-// Callers retain only the current price and any streaming path statistic they need.
 class GeometricBrownianMotion {
 public:
     GeometricBrownianMotion(const MarketData& market, double maturity,
@@ -32,4 +30,4 @@ private:
     double discount_factor_{};
 };
 
-}  // namespace mc
+}
