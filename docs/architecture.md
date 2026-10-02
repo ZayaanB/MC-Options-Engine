@@ -10,6 +10,8 @@ flowchart TD
     APP --> ANALYTICAL[Black-Scholes]
     APP --> TERMINAL[Terminal MC engine]
     APP --> PATH[Path MC engine]
+    APP --> FORECAST[Historical GBM forecast]
+    CSV[Adjusted-close CSV] --> FORECAST
     EURO[European payoffs] --> TERMINAL
     ASIAN[Asian payoff] --> PATH
     MODEL[GBM models] --> TERMINAL
@@ -58,3 +60,9 @@ RNG. Memory grows with worker state, not path count.
 Public entry points reject non-finite values, invalid domains, zero paths or
 threads, zero Asian steps, and odd antithetic path counts. Worker exceptions are
 captured and rethrown after every thread is joined.
+
+## Forecasting boundary
+
+Forecasting reads chronological adjusted closes and estimates physical-measure
+log-return drift and volatility. It returns a price distribution, not an option
+value. This module does not feed the risk-neutral pricing engines.

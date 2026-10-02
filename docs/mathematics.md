@@ -94,3 +94,17 @@ down bump would leave the model domain.
 
 Confidence intervals describe simulation noise under this model. They do not
 cover model risk, parameter error, or finite-difference bias.
+
+## Historical forecast
+
+The forecast tool fits daily log returns
+`x_t = log(S_t / S_{t-1})`. Their sample mean and volatility define a lognormal
+price distribution over `h` trading days:
+
+```math
+S_{t+h}=S_t\exp(h\bar{x}+s\sqrt{h}Z).
+```
+
+This is a physical historical model, not the risk-neutral process used for
+option pricing. Its 95% range describes the fitted model and does not include
+parameter or structural uncertainty.

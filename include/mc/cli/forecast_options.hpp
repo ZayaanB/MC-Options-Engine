@@ -1,0 +1,20 @@
+#pragma once
+
+#include <cstddef>
+#include <span>
+#include <string>
+#include <string_view>
+
+namespace mc::cli {
+
+struct ForecastOptions {
+    std::string csv_path;
+    std::string price_column{"Adj Close"};
+    std::size_t horizon_days{20};
+    double trading_days_per_year{252.0};
+};
+
+[[nodiscard]] ForecastOptions parse_forecast_options(
+    std::span<const std::string_view> arguments);
+
+}

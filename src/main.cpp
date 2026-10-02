@@ -9,7 +9,10 @@
 #include <string_view>
 #include <vector>
 
+#include "mc/cli/forecast_options.hpp"
 #include "mc/cli/price_options.hpp"
+#include "mc/forecasting/historical_gbm.hpp"
+#include "mc/forecasting/price_history_csv.hpp"
 #include "mc/instruments/arithmetic_asian_call.hpp"
 #include "mc/instruments/european_call.hpp"
 #include "mc/instruments/european_put.hpp"
@@ -23,8 +26,9 @@ namespace {
 
 constexpr std::string_view kUsage = R"(Usage:
   mcprice price [options]
+  mcprice forecast --csv FILE [options]
 
-Options:
+Price options:
   --type call|put|asian-call    Instrument type (default: call)
   --method mc|analytical|both   Pricing method (default: both)
   --spot VALUE                  Spot price (default: 100)
@@ -38,6 +42,14 @@ Options:
   --steps N                     Monitoring steps for path simulation (default: 1)
   --seed N                      Unsigned RNG seed (default: 42)
   --antithetic                  Enable antithetic variates; paths must be even
+
+Forecast options:
+  --csv FILE                    Historical CSV file with Date and price columns
+  --price-column NAME           Price column (default: Adj Close)
+  --horizon-days N              Forecast horizon in trading days (default: 20)
+  --trading-days N              Trading days per year (default: 252)
+
+General:
   --help                        Show this help
 )";
 
@@ -157,6 +169,38 @@ void run_price(const mc::cli::PriceOptions& options) {
     }
 }
 
+void run_forecast(const mc::cli::ForecastOptions& options) {
+    const auto history =
+        mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
+    const auto model = mc::forecasting::estimate_historical_gbm(
+        history.adjusted_closes, options.trading_days_per_year);
+    const auto forecast = mc::forecasting::forecast_price(
+        model, history.adjusted_closes.back(), options.horizon_days);
+
+    std::cout << std::fixed << std::setprecision(6)
+              << "Historical GBM Forecast\n"
+              << "=======================\n\n"
+              << "Scenario only; not an option value or trading signal.\n\n"
+              << "CSV:                     " << options.csv_path << '\n'
+              << "Price column:            " << options.price_column << '\n'
+              << "History:                 " << history.dates.front() << " to "
+              << history.dates.back() << '\n'
+              << "Price observations:      " << history.adjusted_closes.size() << '\n'
+              << "Return observations:     " << model.return_observations << '\n'
+              << "Current adjusted close:  " << forecast.current_price << '\n'
+              << "Horizon:                 " << forecast.horizon_days
+              << " trading days\n"
+              << "Annualized drift:        " << model.annualized_drift * 100.0 << "%\n"
+              << "Annualized volatility:   " << model.annualized_volatility * 100.0
+              << "%\n"
+              << "Expected price:          " << forecast.expected_price << '\n'
+              << "Median price:            " << forecast.median_price << '\n'
+              << "95% model interval:      [" << forecast.lower_95 << ", "
+              << forecast.upper_95 << "]\n"
+              << "Probability above today: "
+              << forecast.probability_above_current * 100.0 << "%\n";
+}
+
 }
 
 int main(const int argc, const char* const argv[]) {
@@ -172,7 +216,8 @@ int main(const int argc, const char* const argv[]) {
             std::cout << kUsage;
             return 0;
         }
-        if (arguments.front() != "price") {
+        const std::string_view command = arguments.front();
+        if (command != "price" && command != "forecast") {
             throw std::invalid_argument{"unknown command: " + std::string{arguments.front()}};
         }
         arguments.erase(arguments.begin());
@@ -181,7 +226,11 @@ int main(const int argc, const char* const argv[]) {
             return 0;
         }
 
-        run_price(mc::cli::parse_price_options(arguments));
+        if (command == "price") {
+            run_price(mc::cli::parse_price_options(arguments));
+        } else {
+            run_forecast(mc::cli::parse_forecast_options(arguments));
+        }
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << "\n\n" << kUsage;
