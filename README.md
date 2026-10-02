@@ -14,8 +14,8 @@ Throughput:                     105.697121 M paths/s
 
 This is a small derivatives pricing and risk engine, not a trading system. It
 prices European calls and puts, simulates arithmetic Asian calls, and calculates
-Delta, Gamma, and Vega. The focus is correctness, bounded memory, reproducible
-experiments, and honest performance measurement.
+Delta, Gamma, and Vega. A separate historical GBM tool produces stock-price
+scenarios without mixing physical forecasts into risk-neutral pricing.
 
 ## Results
 
@@ -102,6 +102,21 @@ no analytical implementation:
 Run `./build/mcprice --help` for every option. Bad and non-finite inputs return a
 clear error and a nonzero exit code.
 
+## Forecast a price range
+
+Pass a chronological CSV containing `Date` and `Adj Close` columns:
+
+```bash
+./build/mcprice forecast --csv examples/sample_prices.csv --horizon-days 20
+```
+
+For an exported Apple history, replace the path with your file. Use
+`--price-column Close` when adjusted prices are unavailable. The command fits a
+historical GBM model and reports a mean, median, 95% model interval, and chance
+of finishing above the latest close. These are scenarios, not trading signals.
+Expected returns are noisy, and the interval is only meaningful after
+out-of-sample backtesting.
+
 ## Method
 
 Under risk-neutral Black–Scholes dynamics,
@@ -144,6 +159,8 @@ independent NumPy/SciPy check is available in `python/validate_black_scholes.py`
 - No early exercise, stochastic volatility, jumps, calibration, portfolios, or
   execution.
 - Confidence intervals cover Monte Carlo sampling error, not model risk.
+- Forecast ranges assume future log returns resemble the supplied history.
+- Historical forecasting remains separate from risk-neutral option valuation.
 - Greeks also contain finite-difference bump error.
 - Fixed configurations reproduce on the same implementation and toolchain.
   Different thread counts or standard libraries may produce different random
