@@ -23,6 +23,7 @@ endfunction()
 
 add_library(
     mcpricing
+    src/forecasting/historical_gbm.cpp
     src/instruments/european_call.cpp
     src/instruments/european_put.cpp
     src/instruments/arithmetic_asian_call.cpp
@@ -111,6 +112,7 @@ if(BUILD_TESTING)
         tests/test_black_scholes.cpp
         tests/test_cli.cpp
         tests/test_domain_types.cpp
+        tests/test_forecasting.cpp
         tests/test_greeks.cpp
         tests/test_monte_carlo.cpp
         tests/test_multithreading.cpp
