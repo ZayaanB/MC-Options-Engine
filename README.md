@@ -117,6 +117,18 @@ of finishing above the latest close. These are scenarios, not trading signals.
 Expected returns are noisy, and the interval is only meaningful after
 out-of-sample backtesting.
 
+Run a rolling, no-lookahead evaluation against a latest-price baseline:
+
+```bash
+./build/mcprice backtest \
+  --csv examples/sample_prices.csv \
+  --lookback-days 10 --horizon-days 3 --step-days 1
+```
+
+The report includes MAE, RMSE, MAPE, directional accuracy, and 95% interval
+coverage. A step shorter than the horizon creates overlapping targets; use a
+step equal to the horizon for a smaller non-overlapping evaluation.
+
 ## Method
 
 Under risk-neutral Black–Scholes dynamics,

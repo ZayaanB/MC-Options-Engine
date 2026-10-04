@@ -108,3 +108,16 @@ S_{t+h}=S_t\exp(h\bar{x}+s\sqrt{h}Z).
 This is a physical historical model, not the risk-neutral process used for
 option pricing. Its 95% range describes the fitted model and does not include
 parameter or structural uncertainty.
+
+For forecasts `F_i`, realized prices `A_i`, and origin prices `S_i`, the
+walk-forward report compares GBM errors with the baseline `B_i = S_i`:
+
+```math
+MAE=\frac1n\sum|F_i-A_i|,
+\qquad RMSE=\sqrt{\frac1n\sum(F_i-A_i)^2}.
+```
+
+MAPE scales absolute error by `A_i`. Directional accuracy compares the signs of
+`F_i-S_i` and `A_i-S_i`; coverage is the share of realized prices inside the
+model's 95% interval. Every fit ends at its forecast origin, so future values
+never enter its training window.

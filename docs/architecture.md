@@ -12,6 +12,8 @@ flowchart TD
     APP --> PATH[Path MC engine]
     APP --> FORECAST[Historical GBM forecast]
     CSV[Adjusted-close CSV] --> FORECAST
+    FORECAST --> BACKTEST[Walk-forward backtest]
+    BACKTEST --> METRICS[Errors, direction, coverage]
     EURO[European payoffs] --> TERMINAL
     ASIAN[Asian payoff] --> PATH
     MODEL[GBM models] --> TERMINAL
@@ -66,3 +68,7 @@ captured and rethrown after every thread is joined.
 Forecasting reads chronological adjusted closes and estimates physical-measure
 log-return drift and volatility. It returns a price distribution, not an option
 value. This module does not feed the risk-neutral pricing engines.
+
+The walk-forward evaluator repeatedly fits the model through a forecast origin
+and scores only later prices. It compares the expected-price forecast with a
+latest-price baseline. The configurable step controls whether targets overlap.
