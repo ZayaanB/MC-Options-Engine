@@ -52,6 +52,58 @@ TEST_CASE("forecast reports the moments and interval of its lognormal model",
     REQUIRE(result.probability_above_current == Approx(0.5987063257));
 }
 
+TEST_CASE("EWMA volatility gives recent deviations more weight", "[forecasting][ewma]") {
+    using Catch::Approx;
+
+    const std::array closes{100.0, 110.0, 99.0, 108.9};
+    const double decay = 0.5;
+    const auto model = mc::forecasting::estimate_ewma_gbm(closes, decay, 252.0);
+    const double up = std::log(1.1);
+    const double down = std::log(0.9);
+    const double mean = (2.0 * up + down) / 3.0;
+    const double up_squared = (up - mean) * (up - mean);
+    const double down_squared = (down - mean) * (down - mean);
+    const double expected_variance =
+        (1.25 * up_squared + 0.5 * down_squared) / 1.75;
+
+    REQUIRE(model.return_observations == 3);
+    REQUIRE(model.mean_daily_log_return == Approx(mean));
+    REQUIRE(model.daily_volatility == Approx(std::sqrt(expected_variance)));
+    REQUIRE(model.annualized_volatility ==
+            Approx(std::sqrt(expected_variance * 252.0)));
+}
+
+TEST_CASE("EWMA reacts more strongly to a recent return shock",
+          "[forecasting][ewma]") {
+    using Catch::Approx;
+
+    const std::array old_shock{100.0, 110.0, 110.0, 110.0, 110.0};
+    const std::array recent_shock{100.0, 100.0, 100.0, 100.0, 110.0};
+
+    const auto old_model = mc::forecasting::estimate_ewma_gbm(old_shock, 0.8);
+    const auto recent_model = mc::forecasting::estimate_ewma_gbm(recent_shock, 0.8);
+
+    REQUIRE(recent_model.mean_daily_log_return ==
+            Approx(old_model.mean_daily_log_return));
+    REQUIRE(recent_model.daily_volatility > old_model.daily_volatility);
+}
+
+TEST_CASE("GBM estimator dispatch selects sample or EWMA volatility",
+          "[forecasting][ewma]") {
+    using Catch::Approx;
+
+    const std::array closes{100.0, 103.0, 101.0, 105.0, 102.0};
+    const auto sample = mc::forecasting::estimate_historical_gbm(closes);
+    const auto selected_sample = mc::forecasting::estimate_gbm(
+        closes, mc::forecasting::VolatilityEstimator::sample);
+    const auto ewma = mc::forecasting::estimate_ewma_gbm(closes, 0.8);
+    const auto selected_ewma = mc::forecasting::estimate_gbm(
+        closes, mc::forecasting::VolatilityEstimator::ewma, 0.8);
+
+    REQUIRE(selected_sample.daily_volatility == Approx(sample.daily_volatility));
+    REQUIRE(selected_ewma.daily_volatility == Approx(ewma.daily_volatility));
+}
+
 TEST_CASE("deterministic historical returns produce deterministic forecasts",
           "[forecasting]") {
     using Catch::Approx;
@@ -83,6 +135,15 @@ TEST_CASE("forecasting rejects insufficient or invalid market history",
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::forecasting::estimate_historical_gbm(
                           std::array{100.0, 101.0, 102.0}, 0.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::forecasting::estimate_ewma_gbm(
+                          std::array{100.0, 101.0, 102.0}, 0.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::forecasting::estimate_ewma_gbm(
+                          std::array{100.0, 101.0, 102.0}, 1.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::forecasting::estimate_ewma_gbm(
+                          std::array{100.0, 101.0, 102.0}, nan),
                       std::invalid_argument);
 }
 

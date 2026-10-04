@@ -69,6 +69,10 @@ Forecasting reads chronological adjusted closes and estimates physical-measure
 log-return drift and volatility. It returns a price distribution, not an option
 value. This module does not feed the risk-neutral pricing engines.
 
+Forecast volatility can use the full-window sample estimate or normalized EWMA
+weights. Both retain the same historical mean-return estimate. This choice is
+confined to forecasting and does not alter option-pricing market data.
+
 The walk-forward evaluator repeatedly fits the model through a forecast origin
 and scores only later prices. It compares the expected-price forecast with a
 latest-price baseline. The configurable step controls whether targets overlap.

@@ -6,7 +6,7 @@ namespace mc {
 
 class EuropeanPut final : public Instrument {
 public:
-    explicit EuropeanPut(double strike) noexcept;
+    explicit EuropeanPut(double strike);
 
     [[nodiscard]] double payoff(double terminal_price) const noexcept override;
     [[nodiscard]] double strike() const noexcept;

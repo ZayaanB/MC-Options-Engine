@@ -5,6 +5,8 @@
 
 namespace mc::forecasting {
 
+enum class VolatilityEstimator { sample, ewma };
+
 struct HistoricalGbmModel {
     std::size_t return_observations{};
     double mean_daily_log_return{};
@@ -26,6 +28,17 @@ struct PriceForecast {
 
 [[nodiscard]] HistoricalGbmModel estimate_historical_gbm(
     std::span<const double> adjusted_closes,
+    double trading_days_per_year = 252.0);
+
+[[nodiscard]] HistoricalGbmModel estimate_ewma_gbm(
+    std::span<const double> adjusted_closes,
+    double decay = 0.94,
+    double trading_days_per_year = 252.0);
+
+[[nodiscard]] HistoricalGbmModel estimate_gbm(
+    std::span<const double> adjusted_closes,
+    VolatilityEstimator volatility_estimator,
+    double ewma_decay = 0.94,
     double trading_days_per_year = 252.0);
 
 [[nodiscard]] PriceForecast forecast_price(const HistoricalGbmModel& model,

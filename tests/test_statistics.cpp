@@ -1,5 +1,7 @@
 #include <array>
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -105,4 +107,19 @@ TEST_CASE("constant samples have zero estimated uncertainty", "[statistics]") {
     REQUIRE(statistics.mean() == 7.0);
     REQUIRE(statistics.variance() == 0.0);
     REQUIRE(statistics.standard_error() == 0.0);
+}
+
+TEST_CASE("running statistics reject non-finite values without changing state",
+          "[statistics][validation]") {
+    mc::RunningStatistics statistics;
+    statistics.add(1.0);
+
+    REQUIRE_THROWS_AS(
+        statistics.add(std::numeric_limits<double>::quiet_NaN()),
+        std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        statistics.add(std::numeric_limits<double>::infinity()),
+        std::invalid_argument);
+    REQUIRE(statistics.count() == 1);
+    REQUIRE(statistics.mean() == 1.0);
 }

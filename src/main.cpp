@@ -12,6 +12,7 @@
 #include "mc/cli/backtest_options.hpp"
 #include "mc/cli/forecast_options.hpp"
 #include "mc/cli/price_options.hpp"
+#include "mc/cli/volatility_options.hpp"
 #include "mc/forecasting/historical_gbm.hpp"
 #include "mc/forecasting/price_history_csv.hpp"
 #include "mc/forecasting/walk_forward_backtest.hpp"
@@ -51,6 +52,8 @@ Forecast options:
   --price-column NAME           Price column (default: Adj Close)
   --horizon-days N              Forecast horizon in trading days (default: 20)
   --trading-days N              Trading days per year (default: 252)
+  --volatility-model sample|ewma Volatility estimator (default: sample)
+  --ewma-decay VALUE            EWMA decay in (0,1) (default: 0.94)
 
 Backtest options:
   --csv FILE                    Historical CSV file with Date and price columns
@@ -59,6 +62,8 @@ Backtest options:
   --horizon-days N              Forecast horizon in trading days (default: 20)
   --step-days N                 Days between forecast origins (default: 1)
   --trading-days N              Trading days per year (default: 252)
+  --volatility-model sample|ewma Volatility estimator (default: sample)
+  --ewma-decay VALUE            EWMA decay in (0,1) (default: 0.94)
 
 General:
   --help                        Show this help
@@ -187,8 +192,9 @@ void run_price(const mc::cli::PriceOptions& options) {
 void run_forecast(const mc::cli::ForecastOptions& options) {
     const auto history =
         mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
-    const auto model = mc::forecasting::estimate_historical_gbm(
-        history.adjusted_closes, options.trading_days_per_year);
+    const auto model = mc::forecasting::estimate_gbm(
+        history.adjusted_closes, options.volatility_estimator,
+        options.ewma_decay, options.trading_days_per_year);
     const auto forecast = mc::forecasting::forecast_price(
         model, history.adjusted_closes.back(), options.horizon_days);
 
@@ -202,6 +208,14 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
               << history.dates.back() << '\n'
               << "Price observations:      " << history.adjusted_closes.size() << '\n'
               << "Return observations:     " << model.return_observations << '\n'
+              << "Volatility model:        "
+              << mc::cli::volatility_estimator_name(options.volatility_estimator)
+              << '\n';
+    if (options.volatility_estimator ==
+        mc::forecasting::VolatilityEstimator::ewma) {
+        std::cout << "EWMA decay:              " << options.ewma_decay << '\n';
+    }
+    std::cout
               << "Current adjusted close:  " << forecast.current_price << '\n'
               << "Horizon:                 " << forecast.horizon_days
               << " trading " << trading_day_word(forecast.horizon_days) << '\n'
@@ -239,6 +253,15 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
               << "Step:                    " << options.config.step_days
               << " trading " << trading_day_word(options.config.step_days) << '\n'
               << "Forecasts:               " << result.points.size() << '\n'
+              << "Volatility model:        "
+              << mc::cli::volatility_estimator_name(
+                     options.config.volatility_estimator)
+              << '\n';
+    if (options.config.volatility_estimator ==
+        mc::forecasting::VolatilityEstimator::ewma) {
+        std::cout << "EWMA decay:              " << options.config.ewma_decay << '\n';
+    }
+    std::cout
               << "Overlapping targets:     "
               << (options.config.step_days < options.config.horizon_days ? "yes" : "no")
               << "\n\n"

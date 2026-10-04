@@ -4,6 +4,8 @@
 #include <span>
 #include <vector>
 
+#include "mc/forecasting/historical_gbm.hpp"
+
 namespace mc::forecasting {
 
 struct BacktestConfig {
@@ -11,6 +13,8 @@ struct BacktestConfig {
     std::size_t horizon_days{20};
     std::size_t step_days{1};
     double trading_days_per_year{252.0};
+    VolatilityEstimator volatility_estimator{VolatilityEstimator::sample};
+    double ewma_decay{0.94};
 };
 
 struct BacktestPoint {

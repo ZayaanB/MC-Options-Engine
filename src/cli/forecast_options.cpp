@@ -10,6 +10,8 @@
 #include <system_error>
 #include <vector>
 
+#include "mc/cli/volatility_options.hpp"
+
 namespace mc::cli {
 namespace {
 
@@ -74,6 +76,12 @@ ForecastOptions parse_forecast_options(
         } else if (argument == "--trading-days") {
             options.trading_days_per_year =
                 parse_positive_double(take_value(arguments, index, argument), argument);
+        } else if (argument == "--volatility-model") {
+            options.volatility_estimator = parse_volatility_estimator(
+                take_value(arguments, index, argument));
+        } else if (argument == "--ewma-decay") {
+            options.ewma_decay =
+                parse_ewma_decay(take_value(arguments, index, argument));
         } else {
             throw std::invalid_argument{"unknown option: " + std::string{argument}};
         }
@@ -84,6 +92,11 @@ ForecastOptions parse_forecast_options(
     }
     if (options.price_column.empty()) {
         throw std::invalid_argument{"--price-column must not be empty"};
+    }
+    if (std::find(seen.begin(), seen.end(), "--ewma-decay") != seen.end() &&
+        options.volatility_estimator != forecasting::VolatilityEstimator::ewma) {
+        throw std::invalid_argument{
+            "--ewma-decay requires --volatility-model ewma"};
     }
     return options;
 }

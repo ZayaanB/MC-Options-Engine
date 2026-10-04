@@ -14,6 +14,8 @@ TEST_CASE("backtest CLI parses rolling evaluation options", "[backtest-cli]") {
         std::string_view{"--horizon-days"}, std::string_view{"10"},
         std::string_view{"--step-days"}, std::string_view{"5"},
         std::string_view{"--trading-days"}, std::string_view{"250"},
+        std::string_view{"--volatility-model"}, std::string_view{"ewma"},
+        std::string_view{"--ewma-decay"}, std::string_view{"0.97"},
     };
     const auto options = mc::cli::parse_backtest_options(arguments);
 
@@ -23,6 +25,9 @@ TEST_CASE("backtest CLI parses rolling evaluation options", "[backtest-cli]") {
     REQUIRE(options.config.horizon_days == 10);
     REQUIRE(options.config.step_days == 5);
     REQUIRE(options.config.trading_days_per_year == 250.0);
+    REQUIRE(options.config.volatility_estimator ==
+            mc::forecasting::VolatilityEstimator::ewma);
+    REQUIRE(options.config.ewma_decay == 0.97);
 }
 
 TEST_CASE("backtest CLI uses rolling defaults", "[backtest-cli]") {
@@ -35,6 +40,9 @@ TEST_CASE("backtest CLI uses rolling defaults", "[backtest-cli]") {
     REQUIRE(options.config.horizon_days == 20);
     REQUIRE(options.config.step_days == 1);
     REQUIRE(options.config.trading_days_per_year == 252.0);
+    REQUIRE(options.config.volatility_estimator ==
+            mc::forecasting::VolatilityEstimator::sample);
+    REQUIRE(options.config.ewma_decay == 0.94);
 }
 
 TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]") {
@@ -49,6 +57,12 @@ TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]
         std::string_view{"--csv"}, std::string_view{"prices.csv"},
         std::string_view{"--horizon-days"}, std::string_view{"5"},
         std::string_view{"--horizon-days"}, std::string_view{"10"}};
+    constexpr std::array bad_model{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--volatility-model"}, std::string_view{"garch"}};
+    constexpr std::array unused_decay{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--ewma-decay"}, std::string_view{"0.90"}};
 
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(missing_csv),
                       std::invalid_argument);
@@ -57,5 +71,9 @@ TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(bad_step),
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(duplicate),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(bad_model),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(unused_decay),
                       std::invalid_argument);
 }

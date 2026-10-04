@@ -111,4 +111,8 @@ TEST_CASE("analytical pricing rejects invalid inputs", "[black-scholes][validati
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::black_scholes_put(100.0, 100.0, infinity, 0.20, 1.0),
                       std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        mc::black_scholes_put(100.0, 100.0,
+                              -std::numeric_limits<double>::max(), 0.20, 1.0),
+        std::overflow_error);
 }

@@ -1,6 +1,7 @@
 #include "mc/forecasting/price_history_csv.hpp"
 
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <stdexcept>
@@ -77,6 +78,40 @@ void remove_carriage_return(std::string& line) {
     }
 }
 
+unsigned digit(const char value, const std::size_t line_number) {
+    if (value < '0' || value > '9') {
+        throw std::invalid_argument{
+            "invalid Date value on CSV line " + std::to_string(line_number) +
+            "; expected YYYY-MM-DD"};
+    }
+    return static_cast<unsigned>(value - '0');
+}
+
+void validate_date(const std::string& value, const std::size_t line_number) {
+    if (value.size() != 10 || value[4] != '-' || value[7] != '-') {
+        throw std::invalid_argument{
+            "invalid Date value on CSV line " + std::to_string(line_number) +
+            "; expected YYYY-MM-DD"};
+    }
+    const int year_value =
+        static_cast<int>(digit(value[0], line_number) * 1000U +
+                         digit(value[1], line_number) * 100U +
+                         digit(value[2], line_number) * 10U +
+                         digit(value[3], line_number));
+    const unsigned month_value =
+        digit(value[5], line_number) * 10U + digit(value[6], line_number);
+    const unsigned day_value =
+        digit(value[8], line_number) * 10U + digit(value[9], line_number);
+    const std::chrono::year_month_day date{
+        std::chrono::year{year_value}, std::chrono::month{month_value},
+        std::chrono::day{day_value}};
+    if (year_value == 0 || !date.ok()) {
+        throw std::invalid_argument{
+            "invalid Date value on CSV line " + std::to_string(line_number) +
+            "; expected YYYY-MM-DD"};
+    }
+}
+
 }
 
 PriceHistory read_price_history_csv(std::istream& input,
@@ -111,10 +146,7 @@ PriceHistory read_price_history_csv(std::istream& input,
             throw std::invalid_argument{"unexpected column count on CSV line " +
                                         std::to_string(line_number)};
         }
-        if (fields[date_column].empty()) {
-            throw std::invalid_argument{"missing Date value on CSV line " +
-                                        std::to_string(line_number)};
-        }
+        validate_date(fields[date_column], line_number);
         if (!history.dates.empty() && fields[date_column] <= history.dates.back()) {
             throw std::invalid_argument{
                 "CSV dates must be in strictly increasing order on line " +
@@ -123,6 +155,10 @@ PriceHistory read_price_history_csv(std::istream& input,
         history.dates.push_back(fields[date_column]);
         history.adjusted_closes.push_back(
             parse_price(fields[value_column], line_number, price_column));
+    }
+
+    if (input.bad()) {
+        throw std::runtime_error{"failed while reading CSV data"};
     }
 
     if (history.adjusted_closes.empty()) {

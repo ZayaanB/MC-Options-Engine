@@ -27,12 +27,8 @@ void require_finite_result(const double value) {
     }
 }
 
-}
-
-HistoricalGbmModel estimate_historical_gbm(
-    const std::span<const double> adjusted_closes,
-    const double trading_days_per_year) {
-    require_positive_finite(trading_days_per_year, "trading days per year");
+RunningStatistics log_return_statistics(
+    const std::span<const double> adjusted_closes) {
     if (adjusted_closes.size() < 3) {
         throw std::invalid_argument{"at least three adjusted closes are required"};
     }
@@ -43,23 +39,82 @@ HistoricalGbmModel estimate_historical_gbm(
         require_positive_finite(adjusted_closes[index], "adjusted close");
         returns.add(std::log(adjusted_closes[index] / adjusted_closes[index - 1]));
     }
+    return returns;
+}
 
-    const double daily_volatility = std::sqrt(returns.variance());
+HistoricalGbmModel make_model(const std::size_t observations,
+                              const double mean_daily_log_return,
+                              const double daily_volatility,
+                              const double trading_days_per_year) {
     const double annualized_volatility =
         daily_volatility * std::sqrt(trading_days_per_year);
     const double annualized_drift =
-        returns.mean() * trading_days_per_year +
+        mean_daily_log_return * trading_days_per_year +
         0.5 * annualized_volatility * annualized_volatility;
 
     require_finite_result(annualized_drift);
     require_finite_result(annualized_volatility);
 
-    return HistoricalGbmModel{adjusted_closes.size() - 1,
-                              returns.mean(),
+    return HistoricalGbmModel{observations,
+                              mean_daily_log_return,
                               daily_volatility,
                               annualized_drift,
                               annualized_volatility,
                               trading_days_per_year};
+}
+
+}
+
+HistoricalGbmModel estimate_historical_gbm(
+    const std::span<const double> adjusted_closes,
+    const double trading_days_per_year) {
+    require_positive_finite(trading_days_per_year, "trading days per year");
+    const RunningStatistics returns = log_return_statistics(adjusted_closes);
+
+    const double daily_volatility = std::sqrt(returns.variance());
+    return make_model(adjusted_closes.size() - 1, returns.mean(), daily_volatility,
+                      trading_days_per_year);
+}
+
+HistoricalGbmModel estimate_ewma_gbm(
+    const std::span<const double> adjusted_closes, const double decay,
+    const double trading_days_per_year) {
+    require_positive_finite(trading_days_per_year, "trading days per year");
+    if (!std::isfinite(decay) || decay <= 0.0 || decay >= 1.0) {
+        throw std::invalid_argument{"EWMA decay must be finite and between zero and one"};
+    }
+
+    const RunningStatistics returns = log_return_statistics(adjusted_closes);
+    const double mean = returns.mean();
+    double weighted_squared_deviations = 0.0;
+    double weight_sum = 0.0;
+    for (std::size_t index = 1; index < adjusted_closes.size(); ++index) {
+        const double value =
+            std::log(adjusted_closes[index] / adjusted_closes[index - 1]);
+        const double deviation = value - mean;
+        weighted_squared_deviations =
+            decay * weighted_squared_deviations + deviation * deviation;
+        weight_sum = decay * weight_sum + 1.0;
+    }
+    const double variance = weighted_squared_deviations / weight_sum;
+    require_finite_result(variance);
+    return make_model(adjusted_closes.size() - 1, mean, std::sqrt(variance),
+                      trading_days_per_year);
+}
+
+HistoricalGbmModel estimate_gbm(
+    const std::span<const double> adjusted_closes,
+    const VolatilityEstimator volatility_estimator, const double ewma_decay,
+    const double trading_days_per_year) {
+    switch (volatility_estimator) {
+        case VolatilityEstimator::sample:
+            return estimate_historical_gbm(adjusted_closes,
+                                           trading_days_per_year);
+        case VolatilityEstimator::ewma:
+            return estimate_ewma_gbm(adjusted_closes, ewma_decay,
+                                     trading_days_per_year);
+    }
+    throw std::invalid_argument{"unknown volatility estimator"};
 }
 
 PriceForecast forecast_price(const HistoricalGbmModel& model,

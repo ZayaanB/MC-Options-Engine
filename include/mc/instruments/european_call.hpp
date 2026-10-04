@@ -6,7 +6,7 @@ namespace mc {
 
 class EuropeanCall final : public Instrument {
 public:
-    explicit EuropeanCall(double strike) noexcept;
+    explicit EuropeanCall(double strike);
 
     [[nodiscard]] double payoff(double terminal_price) const noexcept override;
     [[nodiscard]] double strike() const noexcept;

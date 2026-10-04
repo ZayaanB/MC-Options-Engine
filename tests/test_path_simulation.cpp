@@ -90,4 +90,13 @@ TEST_CASE("GBM path model rejects invalid construction", "[path][validation]") {
         std::invalid_argument);
     REQUIRE_THROWS_AS(mc::GeometricBrownianMotion(kMarket, 1.0, 0),
                       std::invalid_argument);
+
+    auto overflowing_market = kMarket;
+    overflowing_market.risk_free_rate = -std::numeric_limits<double>::max();
+    REQUIRE_THROWS_AS(mc::BlackScholesModel(overflowing_market, 1.0),
+                      std::overflow_error);
+    REQUIRE_THROWS_AS(mc::GeometricBrownianMotion(overflowing_market, 1.0, 12),
+                      std::overflow_error);
+    REQUIRE_THROWS_AS(mc::BlackScholesModel(kMarket, -1.0),
+                      std::invalid_argument);
 }
