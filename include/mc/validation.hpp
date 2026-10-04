@@ -6,6 +6,7 @@
 
 namespace mc {
 
+void validate_strike(double strike);
 void validate(const MarketData& market);
 void validate(const OptionParameters& option);
 void validate(const SimulationConfig& config);

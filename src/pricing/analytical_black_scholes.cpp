@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 #include "mc/validation.hpp"
 
@@ -12,6 +13,14 @@ struct AnalyticalPrices {
     double call;
     double put;
 };
+
+AnalyticalPrices require_finite_prices(const AnalyticalPrices prices) {
+    if (!std::isfinite(prices.call) || !std::isfinite(prices.put)) {
+        throw std::overflow_error{
+            "Black-Scholes price exceeds the finite numeric range"};
+    }
+    return prices;
+}
 
 AnalyticalPrices calculate_prices(const double spot, const double strike, const double rate,
                                   const double volatility, const double maturity) {
@@ -28,20 +37,20 @@ AnalyticalPrices calculate_prices(const double spot, const double strike, const 
     validate(option);
 
     if (maturity == 0.0) {
-        return {
+        return require_finite_prices({
             .call = std::max(spot - strike, 0.0),
             .put = std::max(strike - spot, 0.0),
-        };
+        });
     }
 
     const double discount_factor = std::exp(-rate * maturity);
     const double discounted_strike = strike * discount_factor;
 
     if (volatility == 0.0) {
-        return {
+        return require_finite_prices({
             .call = std::max(spot - discounted_strike, 0.0),
             .put = std::max(discounted_strike - spot, 0.0),
-        };
+        });
     }
 
     const double volatility_time = volatility * std::sqrt(maturity);
@@ -51,11 +60,11 @@ AnalyticalPrices calculate_prices(const double spot, const double strike, const 
         volatility_time;
     const double d2 = d1 - volatility_time;
 
-    return {
+    return require_finite_prices({
         .call = spot * standard_normal_cdf(d1) - discounted_strike * standard_normal_cdf(d2),
         .put = discounted_strike * standard_normal_cdf(-d2) -
                spot * standard_normal_cdf(-d1),
-    };
+    });
 }
 
 }

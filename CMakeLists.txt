@@ -53,6 +53,7 @@ add_library(
     src/cli/backtest_options.cpp
     src/cli/forecast_options.cpp
     src/cli/price_options.cpp
+    src/cli/volatility_options.cpp
 )
 target_compile_features(mccli PUBLIC cxx_std_20)
 target_link_libraries(mccli PUBLIC mcpricing)

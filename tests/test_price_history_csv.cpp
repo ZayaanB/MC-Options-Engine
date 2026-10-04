@@ -56,6 +56,10 @@ TEST_CASE("price history rejects malformed files", "[forecasting][csv][validatio
         "Date,Adj Close\n2024-01-02,\"100\n"};
     std::istringstream reversed{
         "Date,Adj Close\n2024-01-03,100\n2024-01-02,101\n"};
+    std::istringstream bad_format{
+        "Date,Adj Close\n01/02/2024,100\n"};
+    std::istringstream bad_calendar_date{
+        "Date,Adj Close\n2024-02-30,100\n"};
 
     REQUIRE_THROWS_AS(mc::forecasting::read_price_history_csv(empty),
                       std::invalid_argument);
@@ -68,5 +72,9 @@ TEST_CASE("price history rejects malformed files", "[forecasting][csv][validatio
     REQUIRE_THROWS_AS(mc::forecasting::read_price_history_csv(unterminated),
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::forecasting::read_price_history_csv(reversed),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::forecasting::read_price_history_csv(bad_format),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::forecasting::read_price_history_csv(bad_calendar_date),
                       std::invalid_argument);
 }

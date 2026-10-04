@@ -16,6 +16,13 @@ void require_finite(const double value, const std::string_view name) {
 
 }
 
+void validate_strike(const double strike) {
+    require_finite(strike, "strike");
+    if (strike <= 0.0) {
+        throw std::invalid_argument{"strike must be positive"};
+    }
+}
+
 void validate(const MarketData& market) {
     require_finite(market.spot, "spot");
     require_finite(market.risk_free_rate, "rate");
@@ -30,12 +37,9 @@ void validate(const MarketData& market) {
 }
 
 void validate(const OptionParameters& option) {
-    require_finite(option.strike, "strike");
+    validate_strike(option.strike);
     require_finite(option.maturity, "maturity");
 
-    if (option.strike <= 0.0) {
-        throw std::invalid_argument{"strike must be positive"};
-    }
     if (option.maturity < 0.0) {
         throw std::invalid_argument{"maturity must be nonnegative"};
     }

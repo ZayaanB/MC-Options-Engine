@@ -34,6 +34,11 @@ void validate_request(const std::span<const double> adjusted_closes,
         config.trading_days_per_year <= 0.0) {
         throw std::invalid_argument{"trading days per year must be finite and positive"};
     }
+    if (config.volatility_estimator == VolatilityEstimator::ewma &&
+        (!std::isfinite(config.ewma_decay) || config.ewma_decay <= 0.0 ||
+         config.ewma_decay >= 1.0)) {
+        throw std::invalid_argument{"EWMA decay must be finite and between zero and one"};
+    }
     if (adjusted_closes.size() <= config.lookback_days ||
         config.horizon_days > adjusted_closes.size() - config.lookback_days - 1) {
         throw std::invalid_argument{"price history is too short for the backtest configuration"};
@@ -66,8 +71,9 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
     for (std::size_t origin = config.lookback_days; origin <= last_origin;) {
         const auto training = adjusted_closes.subspan(
             origin - config.lookback_days, config.lookback_days + 1);
-        const auto model =
-            estimate_historical_gbm(training, config.trading_days_per_year);
+        const auto model = estimate_gbm(training, config.volatility_estimator,
+                                        config.ewma_decay,
+                                        config.trading_days_per_year);
         const auto forecast =
             forecast_price(model, adjusted_closes[origin], config.horizon_days);
         const std::size_t target = origin + config.horizon_days;

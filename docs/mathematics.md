@@ -109,6 +109,18 @@ This is a physical historical model, not the risk-neutral process used for
 option pricing. Its 95% range describes the fitted model and does not include
 parameter or structural uncertainty.
 
+The optional EWMA estimate uses normalized exponential weights:
+
+```math
+s_{EWMA}^2=
+\frac{\sum_{j=1}^{n}\lambda^{n-j}(x_j-\bar{x})^2}
+{\sum_{j=1}^{n}\lambda^{n-j}},
+\qquad 0<\lambda<1.
+```
+
+The default decay is `0.94`. Lower values react faster to recent volatility.
+EWMA changes the forecast distribution, not risk-neutral pricing volatility.
+
 For forecasts `F_i`, realized prices `A_i`, and origin prices `S_i`, the
 walk-forward report compares GBM errors with the baseline `B_i = S_i`:
 

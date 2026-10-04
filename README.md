@@ -104,7 +104,8 @@ clear error and a nonzero exit code.
 
 ## Forecast a price range
 
-Pass a chronological CSV containing `Date` and `Adj Close` columns:
+Pass a chronological CSV containing ISO `YYYY-MM-DD` dates and an `Adj Close`
+column:
 
 ```bash
 ./build/mcprice forecast --csv examples/sample_prices.csv --horizon-days 20
@@ -117,6 +118,9 @@ of finishing above the latest close. These are scenarios, not trading signals.
 Expected returns are noisy, and the interval is only meaningful after
 out-of-sample backtesting.
 
+Use `--volatility-model ewma --ewma-decay 0.94` to weight recent return
+deviations more heavily. Sample volatility remains the default.
+
 Run a rolling, no-lookahead evaluation against a latest-price baseline:
 
 ```bash
@@ -127,7 +131,9 @@ Run a rolling, no-lookahead evaluation against a latest-price baseline:
 
 The report includes MAE, RMSE, MAPE, directional accuracy, and 95% interval
 coverage. A step shorter than the horizon creates overlapping targets; use a
-step equal to the horizon for a smaller non-overlapping evaluation.
+step equal to the horizon for a smaller non-overlapping evaluation. The same
+volatility-model options work here, making interval calibration directly
+comparable.
 
 ## Method
 
@@ -172,6 +178,7 @@ independent NumPy/SciPy check is available in `python/validate_black_scholes.py`
   execution.
 - Confidence intervals cover Monte Carlo sampling error, not model risk.
 - Forecast ranges assume future log returns resemble the supplied history.
+- EWMA changes forecast uncertainty only; it does not change pricing volatility.
 - Historical forecasting remains separate from risk-neutral option valuation.
 - Greeks also contain finite-difference bump error.
 - Fixed configurations reproduce on the same implementation and toolchain.

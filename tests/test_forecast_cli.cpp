@@ -12,6 +12,8 @@ TEST_CASE("forecast CLI parses its data and horizon configuration", "[forecast-c
         std::string_view{"--price-column"}, std::string_view{"Close"},
         std::string_view{"--horizon-days"}, std::string_view{"63"},
         std::string_view{"--trading-days"}, std::string_view{"250"},
+        std::string_view{"--volatility-model"}, std::string_view{"ewma"},
+        std::string_view{"--ewma-decay"}, std::string_view{"0.90"},
     };
     const auto options = mc::cli::parse_forecast_options(arguments);
 
@@ -19,6 +21,9 @@ TEST_CASE("forecast CLI parses its data and horizon configuration", "[forecast-c
     REQUIRE(options.price_column == "Close");
     REQUIRE(options.horizon_days == 63);
     REQUIRE(options.trading_days_per_year == 250.0);
+    REQUIRE(options.volatility_estimator ==
+            mc::forecasting::VolatilityEstimator::ewma);
+    REQUIRE(options.ewma_decay == 0.90);
 }
 
 TEST_CASE("forecast CLI uses safe defaults", "[forecast-cli]") {
@@ -29,6 +34,9 @@ TEST_CASE("forecast CLI uses safe defaults", "[forecast-cli]") {
     REQUIRE(options.price_column == "Adj Close");
     REQUIRE(options.horizon_days == 20);
     REQUIRE(options.trading_days_per_year == 252.0);
+    REQUIRE(options.volatility_estimator ==
+            mc::forecasting::VolatilityEstimator::sample);
+    REQUIRE(options.ewma_decay == 0.94);
 }
 
 TEST_CASE("forecast CLI rejects malformed requests", "[forecast-cli][validation]") {
@@ -49,6 +57,15 @@ TEST_CASE("forecast CLI rejects malformed requests", "[forecast-cli][validation]
                                  std::string_view{"prices.csv"},
                                  std::string_view{"--ticker"},
                                  std::string_view{"AAPL"}};
+    constexpr std::array bad_model{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--volatility-model"}, std::string_view{"garch"}};
+    constexpr std::array bad_decay{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--ewma-decay"}, std::string_view{"1"}};
+    constexpr std::array unused_decay{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--ewma-decay"}, std::string_view{"0.90"}};
 
     REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(missing_csv),
                       std::invalid_argument);
@@ -59,5 +76,11 @@ TEST_CASE("forecast CLI rejects malformed requests", "[forecast-cli][validation]
     REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(duplicate),
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(unknown),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(bad_model),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(bad_decay),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(unused_decay),
                       std::invalid_argument);
 }
