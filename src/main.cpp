@@ -9,10 +9,12 @@
 #include <string_view>
 #include <vector>
 
+#include "mc/cli/backtest_options.hpp"
 #include "mc/cli/forecast_options.hpp"
 #include "mc/cli/price_options.hpp"
 #include "mc/forecasting/historical_gbm.hpp"
 #include "mc/forecasting/price_history_csv.hpp"
+#include "mc/forecasting/walk_forward_backtest.hpp"
 #include "mc/instruments/arithmetic_asian_call.hpp"
 #include "mc/instruments/european_call.hpp"
 #include "mc/instruments/european_put.hpp"
@@ -27,6 +29,7 @@ namespace {
 constexpr std::string_view kUsage = R"(Usage:
   mcprice price [options]
   mcprice forecast --csv FILE [options]
+  mcprice backtest --csv FILE [options]
 
 Price options:
   --type call|put|asian-call    Instrument type (default: call)
@@ -49,9 +52,21 @@ Forecast options:
   --horizon-days N              Forecast horizon in trading days (default: 20)
   --trading-days N              Trading days per year (default: 252)
 
+Backtest options:
+  --csv FILE                    Historical CSV file with Date and price columns
+  --price-column NAME           Price column (default: Adj Close)
+  --lookback-days N             Prior returns per model fit (default: 252)
+  --horizon-days N              Forecast horizon in trading days (default: 20)
+  --step-days N                 Days between forecast origins (default: 1)
+  --trading-days N              Trading days per year (default: 252)
+
 General:
   --help                        Show this help
 )";
+
+std::string_view trading_day_word(const std::size_t days) noexcept {
+    return days == 1 ? "day" : "days";
+}
 
 double analytical_price(const mc::cli::OptionType type, const mc::MarketData& market,
                         const mc::OptionParameters& option) {
@@ -189,7 +204,7 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
               << "Return observations:     " << model.return_observations << '\n'
               << "Current adjusted close:  " << forecast.current_price << '\n'
               << "Horizon:                 " << forecast.horizon_days
-              << " trading days\n"
+              << " trading " << trading_day_word(forecast.horizon_days) << '\n'
               << "Annualized drift:        " << model.annualized_drift * 100.0 << "%\n"
               << "Annualized volatility:   " << model.annualized_volatility * 100.0
               << "%\n"
@@ -199,6 +214,59 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
               << forecast.upper_95 << "]\n"
               << "Probability above today: "
               << forecast.probability_above_current * 100.0 << "%\n";
+}
+
+void run_backtest(const mc::cli::BacktestOptions& options) {
+    const auto history =
+        mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
+    const auto result =
+        mc::forecasting::walk_forward_backtest(history.adjusted_closes, options.config);
+    const auto& first = result.points.front();
+    const auto& last = result.points.back();
+
+    std::cout << std::fixed << std::setprecision(6)
+              << "Historical GBM Walk-Forward Backtest\n"
+              << "====================================\n\n"
+              << "Each forecast uses only data available at its origin.\n\n"
+              << "CSV:                     " << options.csv_path << '\n'
+              << "Price column:            " << options.price_column << '\n'
+              << "Evaluation period:       " << history.dates[first.origin_index]
+              << " to " << history.dates[last.target_index] << '\n'
+              << "Lookback:                " << options.config.lookback_days
+              << " trading " << trading_day_word(options.config.lookback_days) << '\n'
+              << "Horizon:                 " << options.config.horizon_days
+              << " trading " << trading_day_word(options.config.horizon_days) << '\n'
+              << "Step:                    " << options.config.step_days
+              << " trading " << trading_day_word(options.config.step_days) << '\n'
+              << "Forecasts:               " << result.points.size() << '\n'
+              << "Overlapping targets:     "
+              << (options.config.step_days < options.config.horizon_days ? "yes" : "no")
+              << "\n\n"
+              << "Historical GBM\n"
+              << "  MAE:                   " << result.mean_absolute_error << '\n'
+              << "  RMSE:                  " << result.root_mean_squared_error << '\n'
+              << "  MAPE:                  "
+              << result.mean_absolute_percentage_error * 100.0 << "%\n"
+              << "Latest-price baseline\n"
+              << "  MAE:                   " << result.baseline_mean_absolute_error << '\n'
+              << "  RMSE:                  "
+              << result.baseline_root_mean_squared_error << '\n'
+              << "  MAPE:                  "
+              << result.baseline_mean_absolute_percentage_error * 100.0 << "%\n";
+    if (result.baseline_mean_absolute_error == 0.0) {
+        std::cout << "MAE improvement:         unavailable (zero baseline error)\n";
+    } else {
+        std::cout << "MAE improvement:         "
+                  << 100.0 * (result.baseline_mean_absolute_error -
+                              result.mean_absolute_error) /
+                         result.baseline_mean_absolute_error
+                  << "%\n";
+    }
+    std::cout << "Directional accuracy:    "
+              << result.directional_accuracy * 100.0 << "%\n"
+              << "95% interval coverage:   " << result.interval_coverage * 100.0
+              << "%\n"
+              << "Mean interval width:     " << result.mean_interval_width << '\n';
 }
 
 }
@@ -217,7 +285,7 @@ int main(const int argc, const char* const argv[]) {
             return 0;
         }
         const std::string_view command = arguments.front();
-        if (command != "price" && command != "forecast") {
+        if (command != "price" && command != "forecast" && command != "backtest") {
             throw std::invalid_argument{"unknown command: " + std::string{arguments.front()}};
         }
         arguments.erase(arguments.begin());
@@ -228,8 +296,10 @@ int main(const int argc, const char* const argv[]) {
 
         if (command == "price") {
             run_price(mc::cli::parse_price_options(arguments));
-        } else {
+        } else if (command == "forecast") {
             run_forecast(mc::cli::parse_forecast_options(arguments));
+        } else {
+            run_backtest(mc::cli::parse_backtest_options(arguments));
         }
         return 0;
     } catch (const std::exception& error) {

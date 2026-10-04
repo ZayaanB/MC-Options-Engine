@@ -25,6 +25,7 @@ add_library(
     mcpricing
     src/forecasting/historical_gbm.cpp
     src/forecasting/price_history_csv.cpp
+    src/forecasting/walk_forward_backtest.cpp
     src/instruments/european_call.cpp
     src/instruments/european_put.cpp
     src/instruments/arithmetic_asian_call.cpp
@@ -47,7 +48,12 @@ target_include_directories(
 mc_enable_warnings(mcpricing)
 target_link_libraries(mcpricing PUBLIC Threads::Threads)
 
-add_library(mccli src/cli/forecast_options.cpp src/cli/price_options.cpp)
+add_library(
+    mccli
+    src/cli/backtest_options.cpp
+    src/cli/forecast_options.cpp
+    src/cli/price_options.cpp
+)
 target_compile_features(mccli PUBLIC cxx_std_20)
 target_link_libraries(mccli PUBLIC mcpricing)
 mc_enable_warnings(mccli)
@@ -110,6 +116,7 @@ if(BUILD_TESTING)
     add_executable(
         mc_tests
         tests/test_asian_option.cpp
+        tests/test_backtest_cli.cpp
         tests/test_black_scholes.cpp
         tests/test_cli.cpp
         tests/test_domain_types.cpp
@@ -121,6 +128,7 @@ if(BUILD_TESTING)
         tests/test_payoffs.cpp
         tests/test_path_simulation.cpp
         tests/test_price_history_csv.cpp
+        tests/test_walk_forward_backtest.cpp
         tests/test_statistics.cpp
         tests/test_smoke.cpp
         tests/test_validation.cpp
