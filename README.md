@@ -121,6 +121,10 @@ out-of-sample backtesting.
 Use `--volatility-model ewma --ewma-decay 0.94` to weight recent return
 deviations more heavily. Sample volatility remains the default.
 
+Drift defaults to its historical estimate. `--drift-model zero` assumes no
+expected price growth. `--drift-model shrinkage --drift-shrinkage 0.5` removes
+half of the estimate; zero keeps it and one removes it entirely.
+
 Run a rolling, no-lookahead evaluation against a latest-price baseline:
 
 ```bash
@@ -179,6 +183,7 @@ independent NumPy/SciPy check is available in `python/validate_black_scholes.py`
 - Confidence intervals cover Monte Carlo sampling error, not model risk.
 - Forecast ranges assume future log returns resemble the supplied history.
 - EWMA changes forecast uncertainty only; it does not change pricing volatility.
+- Drift shrinkage is a transparent sensitivity control, not a fitted signal.
 - Historical forecasting remains separate from risk-neutral option valuation.
 - Greeks also contain finite-difference bump error.
 - Fixed configurations reproduce on the same implementation and toolchain.

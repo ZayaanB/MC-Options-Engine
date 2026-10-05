@@ -63,6 +63,34 @@ HistoricalGbmModel make_model(const std::size_t observations,
                               trading_days_per_year};
 }
 
+HistoricalGbmModel apply_drift_estimator(
+    const HistoricalGbmModel& model, const DriftEstimator drift_estimator,
+    const double drift_shrinkage) {
+    double annualized_drift = model.annualized_drift;
+    switch (drift_estimator) {
+        case DriftEstimator::historical:
+            break;
+        case DriftEstimator::zero:
+            annualized_drift = 0.0;
+            break;
+        case DriftEstimator::shrinkage:
+            if (!std::isfinite(drift_shrinkage) || drift_shrinkage < 0.0 ||
+                drift_shrinkage > 1.0) {
+                throw std::invalid_argument{
+                    "drift shrinkage must be finite and between zero and one"};
+            }
+            annualized_drift *= 1.0 - drift_shrinkage;
+            break;
+        default:
+            throw std::invalid_argument{"unknown drift estimator"};
+    }
+    const double mean_daily_log_return =
+        annualized_drift / model.trading_days_per_year -
+        0.5 * model.daily_volatility * model.daily_volatility;
+    return make_model(model.return_observations, mean_daily_log_return,
+                      model.daily_volatility, model.trading_days_per_year);
+}
+
 }
 
 HistoricalGbmModel estimate_historical_gbm(
@@ -105,16 +133,22 @@ HistoricalGbmModel estimate_ewma_gbm(
 HistoricalGbmModel estimate_gbm(
     const std::span<const double> adjusted_closes,
     const VolatilityEstimator volatility_estimator, const double ewma_decay,
-    const double trading_days_per_year) {
+    const double trading_days_per_year, const DriftEstimator drift_estimator,
+    const double drift_shrinkage) {
+    HistoricalGbmModel model;
     switch (volatility_estimator) {
         case VolatilityEstimator::sample:
-            return estimate_historical_gbm(adjusted_closes,
-                                           trading_days_per_year);
+            model = estimate_historical_gbm(adjusted_closes,
+                                            trading_days_per_year);
+            break;
         case VolatilityEstimator::ewma:
-            return estimate_ewma_gbm(adjusted_closes, ewma_decay,
-                                     trading_days_per_year);
+            model = estimate_ewma_gbm(adjusted_closes, ewma_decay,
+                                      trading_days_per_year);
+            break;
+        default:
+            throw std::invalid_argument{"unknown volatility estimator"};
     }
-    throw std::invalid_argument{"unknown volatility estimator"};
+    return apply_drift_estimator(model, drift_estimator, drift_shrinkage);
 }
 
 PriceForecast forecast_price(const HistoricalGbmModel& model,

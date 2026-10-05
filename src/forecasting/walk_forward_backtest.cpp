@@ -39,6 +39,12 @@ void validate_request(const std::span<const double> adjusted_closes,
          config.ewma_decay >= 1.0)) {
         throw std::invalid_argument{"EWMA decay must be finite and between zero and one"};
     }
+    if (config.drift_estimator == DriftEstimator::shrinkage &&
+        (!std::isfinite(config.drift_shrinkage) ||
+         config.drift_shrinkage < 0.0 || config.drift_shrinkage > 1.0)) {
+        throw std::invalid_argument{
+            "drift shrinkage must be finite and between zero and one"};
+    }
     if (adjusted_closes.size() <= config.lookback_days ||
         config.horizon_days > adjusted_closes.size() - config.lookback_days - 1) {
         throw std::invalid_argument{"price history is too short for the backtest configuration"};
@@ -73,7 +79,9 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
             origin - config.lookback_days, config.lookback_days + 1);
         const auto model = estimate_gbm(training, config.volatility_estimator,
                                         config.ewma_decay,
-                                        config.trading_days_per_year);
+                                        config.trading_days_per_year,
+                                        config.drift_estimator,
+                                        config.drift_shrinkage);
         const auto forecast =
             forecast_price(model, adjusted_closes[origin], config.horizon_days);
         const std::size_t target = origin + config.horizon_days;

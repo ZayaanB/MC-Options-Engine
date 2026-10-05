@@ -6,6 +6,7 @@
 namespace mc::forecasting {
 
 enum class VolatilityEstimator { sample, ewma };
+enum class DriftEstimator { historical, zero, shrinkage };
 
 struct HistoricalGbmModel {
     std::size_t return_observations{};
@@ -39,7 +40,9 @@ struct PriceForecast {
     std::span<const double> adjusted_closes,
     VolatilityEstimator volatility_estimator,
     double ewma_decay = 0.94,
-    double trading_days_per_year = 252.0);
+    double trading_days_per_year = 252.0,
+    DriftEstimator drift_estimator = DriftEstimator::historical,
+    double drift_shrinkage = 0.5);
 
 [[nodiscard]] PriceForecast forecast_price(const HistoricalGbmModel& model,
                                            double current_price,

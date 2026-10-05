@@ -10,6 +10,7 @@
 #include <system_error>
 #include <vector>
 
+#include "mc/cli/drift_options.hpp"
 #include "mc/cli/volatility_options.hpp"
 
 namespace mc::cli {
@@ -88,6 +89,12 @@ BacktestOptions parse_backtest_options(
         } else if (argument == "--ewma-decay") {
             options.config.ewma_decay =
                 parse_ewma_decay(take_value(arguments, index, argument));
+        } else if (argument == "--drift-model") {
+            options.config.drift_estimator = parse_drift_estimator(
+                take_value(arguments, index, argument));
+        } else if (argument == "--drift-shrinkage") {
+            options.config.drift_shrinkage = parse_drift_shrinkage(
+                take_value(arguments, index, argument));
         } else {
             throw std::invalid_argument{"unknown option: " + std::string{argument}};
         }
@@ -104,6 +111,12 @@ BacktestOptions parse_backtest_options(
             forecasting::VolatilityEstimator::ewma) {
         throw std::invalid_argument{
             "--ewma-decay requires --volatility-model ewma"};
+    }
+    if (std::find(seen.begin(), seen.end(), "--drift-shrinkage") != seen.end() &&
+        options.config.drift_estimator !=
+            forecasting::DriftEstimator::shrinkage) {
+        throw std::invalid_argument{
+            "--drift-shrinkage requires --drift-model shrinkage"};
     }
     return options;
 }
