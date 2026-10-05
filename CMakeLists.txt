@@ -51,6 +51,7 @@ target_link_libraries(mcpricing PUBLIC Threads::Threads)
 add_library(
     mccli
     src/cli/backtest_options.cpp
+    src/cli/drift_options.cpp
     src/cli/forecast_options.cpp
     src/cli/price_options.cpp
     src/cli/volatility_options.cpp

@@ -104,6 +104,29 @@ TEST_CASE("GBM estimator dispatch selects sample or EWMA volatility",
     REQUIRE(selected_ewma.daily_volatility == Approx(ewma.daily_volatility));
 }
 
+TEST_CASE("GBM drift models preserve, remove, or shrink historical drift",
+          "[forecasting][drift]") {
+    using Catch::Approx;
+
+    const std::array closes{100.0, 103.0, 101.0, 105.0, 102.0};
+    const auto historical = mc::forecasting::estimate_gbm(
+        closes, mc::forecasting::VolatilityEstimator::sample);
+    const auto zero = mc::forecasting::estimate_gbm(
+        closes, mc::forecasting::VolatilityEstimator::sample, 0.94, 252.0,
+        mc::forecasting::DriftEstimator::zero);
+    const auto shrinkage = mc::forecasting::estimate_gbm(
+        closes, mc::forecasting::VolatilityEstimator::sample, 0.94, 252.0,
+        mc::forecasting::DriftEstimator::shrinkage, 0.25);
+
+    REQUIRE(zero.daily_volatility == Approx(historical.daily_volatility));
+    REQUIRE(shrinkage.daily_volatility == Approx(historical.daily_volatility));
+    REQUIRE(zero.annualized_drift == Approx(0.0).margin(1e-15));
+    REQUIRE(shrinkage.annualized_drift ==
+            Approx(0.75 * historical.annualized_drift));
+    REQUIRE(mc::forecasting::forecast_price(zero, closes.back(), 20)
+                .expected_price == Approx(closes.back()));
+}
+
 TEST_CASE("deterministic historical returns produce deterministic forecasts",
           "[forecasting]") {
     using Catch::Approx;
@@ -145,6 +168,18 @@ TEST_CASE("forecasting rejects insufficient or invalid market history",
     REQUIRE_THROWS_AS(mc::forecasting::estimate_ewma_gbm(
                           std::array{100.0, 101.0, 102.0}, nan),
                       std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        mc::forecasting::estimate_gbm(
+            std::array{100.0, 101.0, 102.0},
+            mc::forecasting::VolatilityEstimator::sample, 0.94, 252.0,
+            mc::forecasting::DriftEstimator::shrinkage, nan),
+        std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        mc::forecasting::estimate_gbm(
+            std::array{100.0, 101.0, 102.0},
+            mc::forecasting::VolatilityEstimator::sample, 0.94, 252.0,
+            static_cast<mc::forecasting::DriftEstimator>(99)),
+        std::invalid_argument);
 }
 
 TEST_CASE("forecasting rejects invalid model requests", "[forecasting][validation]") {

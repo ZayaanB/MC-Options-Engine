@@ -73,6 +73,10 @@ Forecast volatility can use the full-window sample estimate or normalized EWMA
 weights. Both retain the same historical mean-return estimate. This choice is
 confined to forecasting and does not alter option-pricing market data.
 
+Forecast drift can retain the historical GBM estimate, set expected price
+growth to zero, or shrink it toward zero by a configured fraction. Historical
+drift remains the default.
+
 The walk-forward evaluator repeatedly fits the model through a forecast origin
 and scores only later prices. It compares the expected-price forecast with a
 latest-price baseline. The configurable step controls whether targets overlap.

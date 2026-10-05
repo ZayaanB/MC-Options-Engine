@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "mc/cli/backtest_options.hpp"
+#include "mc/cli/drift_options.hpp"
 #include "mc/cli/forecast_options.hpp"
 #include "mc/cli/price_options.hpp"
 #include "mc/cli/volatility_options.hpp"
@@ -54,6 +55,8 @@ Forecast options:
   --trading-days N              Trading days per year (default: 252)
   --volatility-model sample|ewma Volatility estimator (default: sample)
   --ewma-decay VALUE            EWMA decay in (0,1) (default: 0.94)
+  --drift-model MODEL           historical|zero|shrinkage (default: historical)
+  --drift-shrinkage VALUE       Fraction of drift removed in [0,1] (default: 0.5)
 
 Backtest options:
   --csv FILE                    Historical CSV file with Date and price columns
@@ -64,6 +67,8 @@ Backtest options:
   --trading-days N              Trading days per year (default: 252)
   --volatility-model sample|ewma Volatility estimator (default: sample)
   --ewma-decay VALUE            EWMA decay in (0,1) (default: 0.94)
+  --drift-model MODEL           historical|zero|shrinkage (default: historical)
+  --drift-shrinkage VALUE       Fraction of drift removed in [0,1] (default: 0.5)
 
 General:
   --help                        Show this help
@@ -194,7 +199,8 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
         mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
     const auto model = mc::forecasting::estimate_gbm(
         history.adjusted_closes, options.volatility_estimator,
-        options.ewma_decay, options.trading_days_per_year);
+        options.ewma_decay, options.trading_days_per_year,
+        options.drift_estimator, options.drift_shrinkage);
     const auto forecast = mc::forecasting::forecast_price(
         model, history.adjusted_closes.back(), options.horizon_days);
 
@@ -214,6 +220,12 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
     if (options.volatility_estimator ==
         mc::forecasting::VolatilityEstimator::ewma) {
         std::cout << "EWMA decay:              " << options.ewma_decay << '\n';
+    }
+    std::cout << "Drift model:             "
+              << mc::cli::drift_estimator_name(options.drift_estimator) << '\n';
+    if (options.drift_estimator ==
+        mc::forecasting::DriftEstimator::shrinkage) {
+        std::cout << "Drift shrinkage:         " << options.drift_shrinkage << '\n';
     }
     std::cout
               << "Current adjusted close:  " << forecast.current_price << '\n'
@@ -260,6 +272,15 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
     if (options.config.volatility_estimator ==
         mc::forecasting::VolatilityEstimator::ewma) {
         std::cout << "EWMA decay:              " << options.config.ewma_decay << '\n';
+    }
+    std::cout << "Drift model:             "
+              << mc::cli::drift_estimator_name(
+                     options.config.drift_estimator)
+              << '\n';
+    if (options.config.drift_estimator ==
+        mc::forecasting::DriftEstimator::shrinkage) {
+        std::cout << "Drift shrinkage:         "
+                  << options.config.drift_shrinkage << '\n';
     }
     std::cout
               << "Overlapping targets:     "

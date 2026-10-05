@@ -16,6 +16,8 @@ TEST_CASE("backtest CLI parses rolling evaluation options", "[backtest-cli]") {
         std::string_view{"--trading-days"}, std::string_view{"250"},
         std::string_view{"--volatility-model"}, std::string_view{"ewma"},
         std::string_view{"--ewma-decay"}, std::string_view{"0.97"},
+        std::string_view{"--drift-model"}, std::string_view{"shrinkage"},
+        std::string_view{"--drift-shrinkage"}, std::string_view{"0.25"},
     };
     const auto options = mc::cli::parse_backtest_options(arguments);
 
@@ -28,6 +30,9 @@ TEST_CASE("backtest CLI parses rolling evaluation options", "[backtest-cli]") {
     REQUIRE(options.config.volatility_estimator ==
             mc::forecasting::VolatilityEstimator::ewma);
     REQUIRE(options.config.ewma_decay == 0.97);
+    REQUIRE(options.config.drift_estimator ==
+            mc::forecasting::DriftEstimator::shrinkage);
+    REQUIRE(options.config.drift_shrinkage == 0.25);
 }
 
 TEST_CASE("backtest CLI uses rolling defaults", "[backtest-cli]") {
@@ -43,6 +48,9 @@ TEST_CASE("backtest CLI uses rolling defaults", "[backtest-cli]") {
     REQUIRE(options.config.volatility_estimator ==
             mc::forecasting::VolatilityEstimator::sample);
     REQUIRE(options.config.ewma_decay == 0.94);
+    REQUIRE(options.config.drift_estimator ==
+            mc::forecasting::DriftEstimator::historical);
+    REQUIRE(options.config.drift_shrinkage == 0.5);
 }
 
 TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]") {
@@ -63,6 +71,12 @@ TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]
     constexpr std::array unused_decay{
         std::string_view{"--csv"}, std::string_view{"prices.csv"},
         std::string_view{"--ewma-decay"}, std::string_view{"0.90"}};
+    constexpr std::array bad_drift{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--drift-model"}, std::string_view{"random"}};
+    constexpr std::array unused_shrinkage{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--drift-shrinkage"}, std::string_view{"0.5"}};
 
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(missing_csv),
                       std::invalid_argument);
@@ -75,5 +89,9 @@ TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(bad_model),
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(unused_decay),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(bad_drift),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(unused_shrinkage),
                       std::invalid_argument);
 }

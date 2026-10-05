@@ -93,6 +93,28 @@ TEST_CASE("backtest aggregates forecast errors and coverage",
     REQUIRE(result.mean_interval_width > 0.0);
 }
 
+TEST_CASE("zero-drift backtests use the latest price as the point forecast",
+          "[forecasting][backtest][drift]") {
+    using Catch::Approx;
+
+    const std::array prices{100.0, 102.0, 99.0, 103.0, 98.0, 104.0};
+    mc::forecasting::BacktestConfig config;
+    config.lookback_days = 3;
+    config.horizon_days = 1;
+    config.step_days = 1;
+    config.drift_estimator = mc::forecasting::DriftEstimator::zero;
+    const auto result = mc::forecasting::walk_forward_backtest(prices, config);
+
+    REQUIRE(result.points.size() == 2);
+    for (const auto& point : result.points) {
+        REQUIRE(point.forecast_price == Approx(point.current_price));
+    }
+    REQUIRE(result.mean_absolute_error ==
+            Approx(result.baseline_mean_absolute_error));
+    REQUIRE(result.root_mean_squared_error ==
+            Approx(result.baseline_root_mean_squared_error));
+}
+
 TEST_CASE("backtest rejects invalid configurations and histories",
           "[forecasting][backtest][validation]") {
     const std::array prices{100.0, 101.0, 102.0, 103.0};

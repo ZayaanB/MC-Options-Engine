@@ -14,6 +14,8 @@ TEST_CASE("forecast CLI parses its data and horizon configuration", "[forecast-c
         std::string_view{"--trading-days"}, std::string_view{"250"},
         std::string_view{"--volatility-model"}, std::string_view{"ewma"},
         std::string_view{"--ewma-decay"}, std::string_view{"0.90"},
+        std::string_view{"--drift-model"}, std::string_view{"shrinkage"},
+        std::string_view{"--drift-shrinkage"}, std::string_view{"0.75"},
     };
     const auto options = mc::cli::parse_forecast_options(arguments);
 
@@ -24,6 +26,9 @@ TEST_CASE("forecast CLI parses its data and horizon configuration", "[forecast-c
     REQUIRE(options.volatility_estimator ==
             mc::forecasting::VolatilityEstimator::ewma);
     REQUIRE(options.ewma_decay == 0.90);
+    REQUIRE(options.drift_estimator ==
+            mc::forecasting::DriftEstimator::shrinkage);
+    REQUIRE(options.drift_shrinkage == 0.75);
 }
 
 TEST_CASE("forecast CLI uses safe defaults", "[forecast-cli]") {
@@ -37,6 +42,9 @@ TEST_CASE("forecast CLI uses safe defaults", "[forecast-cli]") {
     REQUIRE(options.volatility_estimator ==
             mc::forecasting::VolatilityEstimator::sample);
     REQUIRE(options.ewma_decay == 0.94);
+    REQUIRE(options.drift_estimator ==
+            mc::forecasting::DriftEstimator::historical);
+    REQUIRE(options.drift_shrinkage == 0.5);
 }
 
 TEST_CASE("forecast CLI rejects malformed requests", "[forecast-cli][validation]") {
@@ -66,6 +74,16 @@ TEST_CASE("forecast CLI rejects malformed requests", "[forecast-cli][validation]
     constexpr std::array unused_decay{
         std::string_view{"--csv"}, std::string_view{"prices.csv"},
         std::string_view{"--ewma-decay"}, std::string_view{"0.90"}};
+    constexpr std::array bad_drift{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--drift-model"}, std::string_view{"random"}};
+    constexpr std::array bad_shrinkage{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--drift-model"}, std::string_view{"shrinkage"},
+        std::string_view{"--drift-shrinkage"}, std::string_view{"1.1"}};
+    constexpr std::array unused_shrinkage{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--drift-shrinkage"}, std::string_view{"0.5"}};
 
     REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(missing_csv),
                       std::invalid_argument);
@@ -82,5 +100,11 @@ TEST_CASE("forecast CLI rejects malformed requests", "[forecast-cli][validation]
     REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(bad_decay),
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(unused_decay),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(bad_drift),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(bad_shrinkage),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(unused_shrinkage),
                       std::invalid_argument);
 }

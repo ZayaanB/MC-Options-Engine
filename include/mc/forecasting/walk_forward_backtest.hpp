@@ -15,6 +15,8 @@ struct BacktestConfig {
     double trading_days_per_year{252.0};
     VolatilityEstimator volatility_estimator{VolatilityEstimator::sample};
     double ewma_decay{0.94};
+    DriftEstimator drift_estimator{DriftEstimator::historical};
+    double drift_shrinkage{0.5};
 };
 
 struct BacktestPoint {

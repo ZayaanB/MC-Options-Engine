@@ -121,6 +121,16 @@ s_{EWMA}^2=
 The default decay is `0.94`. Lower values react faster to recent volatility.
 EWMA changes the forecast distribution, not risk-neutral pricing volatility.
 
+For historical annualized GBM drift `mu` and shrinkage strength `a` in `[0,1]`,
+the forecast uses
+
+```math
+\mu_{shrunk}=(1-a)\mu.
+```
+
+Zero retains the historical drift and one produces zero expected price growth.
+The zero and historical drift modes are the two endpoints.
+
 For forecasts `F_i`, realized prices `A_i`, and origin prices `S_i`, the
 walk-forward report compares GBM errors with the baseline `B_i = S_i`:
 
