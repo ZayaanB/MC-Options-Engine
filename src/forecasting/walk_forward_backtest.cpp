@@ -1,6 +1,8 @@
 #include "mc/forecasting/walk_forward_backtest.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #include "mc/forecasting/historical_gbm.hpp"
@@ -17,6 +19,81 @@ int direction(const double change) noexcept {
         return -1;
     }
     return 0;
+}
+
+class MetricsAccumulator {
+public:
+    void add(const double forecast, const double current, const double actual) {
+        if (!std::isfinite(forecast)) {
+            throw std::overflow_error{
+                "backtest forecast exceeds the finite numeric range"};
+        }
+        const double error = forecast - actual;
+        const double squared_error = error * error;
+        const double percentage_error = std::abs(error) / actual;
+        if (!std::isfinite(squared_error) ||
+            !std::isfinite(percentage_error)) {
+            throw std::overflow_error{
+                "backtest error exceeds the finite numeric range"};
+        }
+        absolute_errors_.add(std::abs(error));
+        squared_errors_.add(squared_error);
+        percentage_errors_.add(percentage_error);
+
+        const int predicted_direction = direction(forecast - current);
+        if (predicted_direction != 0) {
+            ++directional_predictions_;
+            if (predicted_direction == direction(actual - current)) {
+                ++correct_directions_;
+            }
+        }
+    }
+
+    ForecastErrorMetrics result() const {
+        const double directional_accuracy =
+            directional_predictions_ == 0
+                ? std::numeric_limits<double>::quiet_NaN()
+                : static_cast<double>(correct_directions_) /
+                      static_cast<double>(directional_predictions_);
+        return ForecastErrorMetrics{
+            absolute_errors_.mean(), std::sqrt(squared_errors_.mean()),
+            percentage_errors_.mean(), directional_predictions_,
+            directional_accuracy};
+    }
+
+private:
+    RunningStatistics absolute_errors_;
+    RunningStatistics squared_errors_;
+    RunningStatistics percentage_errors_;
+    std::size_t directional_predictions_{};
+    std::size_t correct_directions_{};
+};
+
+double momentum_forecast(const std::span<const double> training,
+                         const std::size_t window,
+                         const std::size_t horizon) {
+    const double current = training.back();
+    const double anchor = training[training.size() - window - 1];
+    const double scaled_log_return =
+        std::log(current / anchor) * static_cast<double>(horizon) /
+        static_cast<double>(window);
+    return current * std::exp(scaled_log_return);
+}
+
+double mean_reversion_forecast(const std::span<const double> training,
+                               const std::size_t window,
+                               const std::size_t horizon) {
+    const auto prices = training.last(window + 1);
+    double mean_log_price = 0.0;
+    for (const double price : prices) {
+        mean_log_price += std::log(price);
+    }
+    mean_log_price /= static_cast<double>(prices.size());
+    const double current_log_price = std::log(training.back());
+    const double reversion_fraction = std::min(
+        static_cast<double>(horizon) / static_cast<double>(window), 1.0);
+    return std::exp(current_log_price +
+                    reversion_fraction * (mean_log_price - current_log_price));
 }
 
 void validate_request(const std::span<const double> adjusted_closes,
@@ -63,14 +140,13 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
     validate_request(adjusted_closes, config);
 
     BacktestResult result;
-    RunningStatistics absolute_errors;
-    RunningStatistics squared_errors;
-    RunningStatistics percentage_errors;
-    RunningStatistics baseline_absolute_errors;
-    RunningStatistics baseline_squared_errors;
-    RunningStatistics baseline_percentage_errors;
+    MetricsAccumulator selected_metrics;
+    MetricsAccumulator latest_price_metrics;
+    MetricsAccumulator historical_drift_metrics;
+    MetricsAccumulator zero_drift_metrics;
+    MetricsAccumulator momentum_metrics;
+    MetricsAccumulator mean_reversion_metrics;
     RunningStatistics interval_widths;
-    std::size_t correct_directions = 0;
     std::size_t covered_intervals = 0;
 
     const std::size_t last_origin = adjusted_closes.size() - config.horizon_days - 1;
@@ -84,32 +160,30 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
                                         config.drift_shrinkage);
         const auto forecast =
             forecast_price(model, adjusted_closes[origin], config.horizon_days);
+        const auto historical_model = estimate_gbm(
+            training, config.volatility_estimator, config.ewma_decay,
+            config.trading_days_per_year, DriftEstimator::historical);
+        const auto historical_forecast = forecast_price(
+            historical_model, adjusted_closes[origin], config.horizon_days);
         const std::size_t target = origin + config.horizon_days;
+        const double current = adjusted_closes[origin];
         const double actual = adjusted_closes[target];
-        const double error = forecast.expected_price - actual;
-        const double baseline_error = adjusted_closes[origin] - actual;
-        const double squared_error = error * error;
-        const double percentage_error = std::abs(error) / actual;
-        const double baseline_squared_error = baseline_error * baseline_error;
-        const double baseline_percentage_error = std::abs(baseline_error) / actual;
-        if (!std::isfinite(squared_error) || !std::isfinite(percentage_error) ||
-            !std::isfinite(baseline_squared_error) ||
-            !std::isfinite(baseline_percentage_error)) {
-            throw std::overflow_error{"backtest error exceeds the finite numeric range"};
-        }
+        const std::size_t benchmark_window =
+            std::min<std::size_t>(20, config.lookback_days);
+        const double momentum = momentum_forecast(
+            training, benchmark_window, config.horizon_days);
+        const double mean_reversion = mean_reversion_forecast(
+            training, benchmark_window, config.horizon_days);
 
-        absolute_errors.add(std::abs(error));
-        squared_errors.add(squared_error);
-        percentage_errors.add(percentage_error);
-        baseline_absolute_errors.add(std::abs(baseline_error));
-        baseline_squared_errors.add(baseline_squared_error);
-        baseline_percentage_errors.add(baseline_percentage_error);
+        selected_metrics.add(forecast.expected_price, current, actual);
+        latest_price_metrics.add(current, current, actual);
+        historical_drift_metrics.add(historical_forecast.expected_price,
+                                     current, actual);
+        zero_drift_metrics.add(current, current, actual);
+        momentum_metrics.add(momentum, current, actual);
+        mean_reversion_metrics.add(mean_reversion, current, actual);
         interval_widths.add(forecast.upper_95 - forecast.lower_95);
 
-        if (direction(forecast.expected_price - adjusted_closes[origin]) ==
-            direction(actual - adjusted_closes[origin])) {
-            ++correct_directions;
-        }
         if (actual >= forecast.lower_95 && actual <= forecast.upper_95) {
             ++covered_intervals;
         }
@@ -119,7 +193,12 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
                                               forecast.expected_price,
                                               actual,
                                               forecast.lower_95,
-                                              forecast.upper_95});
+                                              forecast.upper_95,
+                                              current,
+                                              historical_forecast.expected_price,
+                                              current,
+                                              momentum,
+                                              mean_reversion});
 
         if (config.step_days > last_origin - origin) {
             break;
@@ -128,15 +207,12 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
     }
 
     const double count = static_cast<double>(result.points.size());
-    result.mean_absolute_error = absolute_errors.mean();
-    result.root_mean_squared_error = std::sqrt(squared_errors.mean());
-    result.mean_absolute_percentage_error = percentage_errors.mean();
-    result.baseline_mean_absolute_error = baseline_absolute_errors.mean();
-    result.baseline_root_mean_squared_error =
-        std::sqrt(baseline_squared_errors.mean());
-    result.baseline_mean_absolute_percentage_error =
-        baseline_percentage_errors.mean();
-    result.directional_accuracy = static_cast<double>(correct_directions) / count;
+    result.selected_model = selected_metrics.result();
+    result.latest_price = latest_price_metrics.result();
+    result.historical_drift = historical_drift_metrics.result();
+    result.zero_drift = zero_drift_metrics.result();
+    result.momentum = momentum_metrics.result();
+    result.mean_reversion = mean_reversion_metrics.result();
     result.interval_coverage = static_cast<double>(covered_intervals) / count;
     result.mean_interval_width = interval_widths.mean();
     return result;

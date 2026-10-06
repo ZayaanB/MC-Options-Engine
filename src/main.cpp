@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <iomanip>
@@ -242,6 +243,22 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
               << forecast.probability_above_current * 100.0 << "%\n";
 }
 
+void print_error_metrics(const std::string_view label,
+                         const mc::forecasting::ForecastErrorMetrics& metrics) {
+    std::cout << label << '\n'
+              << "  MAE:                   " << metrics.mean_absolute_error << '\n'
+              << "  RMSE:                  " << metrics.root_mean_squared_error << '\n'
+              << "  MAPE:                  "
+              << metrics.mean_absolute_percentage_error * 100.0 << "%\n"
+              << "  Directional accuracy:  ";
+    if (metrics.directional_predictions == 0) {
+        std::cout << "unavailable (no directional forecasts)\n";
+    } else {
+        std::cout << metrics.directional_accuracy * 100.0 << "% ("
+                  << metrics.directional_predictions << " forecasts)\n";
+    }
+}
+
 void run_backtest(const mc::cli::BacktestOptions& options) {
     const auto history =
         mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
@@ -282,33 +299,29 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
         std::cout << "Drift shrinkage:         "
                   << options.config.drift_shrinkage << '\n';
     }
-    std::cout
+    std::cout << "Benchmark window:        "
+              << std::min<std::size_t>(20, options.config.lookback_days)
+              << " trading days\n"
               << "Overlapping targets:     "
               << (options.config.step_days < options.config.horizon_days ? "yes" : "no")
-              << "\n\n"
-              << "Historical GBM\n"
-              << "  MAE:                   " << result.mean_absolute_error << '\n'
-              << "  RMSE:                  " << result.root_mean_squared_error << '\n'
-              << "  MAPE:                  "
-              << result.mean_absolute_percentage_error * 100.0 << "%\n"
-              << "Latest-price baseline\n"
-              << "  MAE:                   " << result.baseline_mean_absolute_error << '\n'
-              << "  RMSE:                  "
-              << result.baseline_root_mean_squared_error << '\n'
-              << "  MAPE:                  "
-              << result.baseline_mean_absolute_percentage_error * 100.0 << "%\n";
-    if (result.baseline_mean_absolute_error == 0.0) {
+              << "\n\n";
+    print_error_metrics("Selected GBM", result.selected_model);
+    print_error_metrics("Latest-price baseline", result.latest_price);
+    print_error_metrics("Historical-drift GBM baseline",
+                        result.historical_drift);
+    print_error_metrics("Zero-drift GBM baseline", result.zero_drift);
+    print_error_metrics("Momentum baseline", result.momentum);
+    print_error_metrics("Mean-reversion baseline", result.mean_reversion);
+    if (result.latest_price.mean_absolute_error == 0.0) {
         std::cout << "MAE improvement:         unavailable (zero baseline error)\n";
     } else {
         std::cout << "MAE improvement:         "
-                  << 100.0 * (result.baseline_mean_absolute_error -
-                              result.mean_absolute_error) /
-                         result.baseline_mean_absolute_error
+                  << 100.0 * (result.latest_price.mean_absolute_error -
+                              result.selected_model.mean_absolute_error) /
+                         result.latest_price.mean_absolute_error
                   << "%\n";
     }
-    std::cout << "Directional accuracy:    "
-              << result.directional_accuracy * 100.0 << "%\n"
-              << "95% interval coverage:   " << result.interval_coverage * 100.0
+    std::cout << "95% interval coverage:   " << result.interval_coverage * 100.0
               << "%\n"
               << "Mean interval width:     " << result.mean_interval_width << '\n';
 }

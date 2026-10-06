@@ -26,10 +26,12 @@ TEST_CASE("walk-forward backtest never trains beyond its forecast origin",
     REQUIRE(result.points[1].target_index == 7);
     REQUIRE(result.points[2].origin_index == 7);
     REQUIRE(result.points[2].target_index == 9);
-    REQUIRE(result.mean_absolute_error == Approx(0.0).margin(1e-10));
-    REQUIRE(result.root_mean_squared_error == Approx(0.0).margin(1e-10));
-    REQUIRE(result.baseline_mean_absolute_error > 2.0);
-    REQUIRE(result.directional_accuracy == 1.0);
+    REQUIRE(result.selected_model.mean_absolute_error ==
+            Approx(0.0).margin(1e-10));
+    REQUIRE(result.selected_model.root_mean_squared_error ==
+            Approx(0.0).margin(1e-10));
+    REQUIRE(result.latest_price.mean_absolute_error > 2.0);
+    REQUIRE(result.selected_model.directional_accuracy == 1.0);
 }
 
 TEST_CASE("flat histories produce exact model and baseline forecasts",
@@ -41,13 +43,14 @@ TEST_CASE("flat histories produce exact model and baseline forecasts",
     const auto result = mc::forecasting::walk_forward_backtest(prices, config);
 
     REQUIRE(result.points.size() == 3);
-    REQUIRE(result.mean_absolute_error == 0.0);
-    REQUIRE(result.root_mean_squared_error == 0.0);
-    REQUIRE(result.mean_absolute_percentage_error == 0.0);
-    REQUIRE(result.baseline_mean_absolute_error == 0.0);
-    REQUIRE(result.baseline_root_mean_squared_error == 0.0);
-    REQUIRE(result.baseline_mean_absolute_percentage_error == 0.0);
-    REQUIRE(result.directional_accuracy == 1.0);
+    REQUIRE(result.selected_model.mean_absolute_error == 0.0);
+    REQUIRE(result.selected_model.root_mean_squared_error == 0.0);
+    REQUIRE(result.selected_model.mean_absolute_percentage_error == 0.0);
+    REQUIRE(result.latest_price.mean_absolute_error == 0.0);
+    REQUIRE(result.latest_price.root_mean_squared_error == 0.0);
+    REQUIRE(result.latest_price.mean_absolute_percentage_error == 0.0);
+    REQUIRE(result.selected_model.directional_predictions == 0);
+    REQUIRE(std::isnan(result.selected_model.directional_accuracy));
     REQUIRE(result.interval_coverage == 1.0);
     REQUIRE(result.mean_interval_width == Approx(0.0).margin(1e-12));
 }
@@ -71,6 +74,12 @@ TEST_CASE("future targets cannot leak into fitted forecasts",
             Approx(ordinary_result.points.front().lower_95));
     REQUIRE(shocked_result.points.front().upper_95 ==
             Approx(ordinary_result.points.front().upper_95));
+    REQUIRE(shocked_result.points.front().historical_drift_forecast ==
+            Approx(ordinary_result.points.front().historical_drift_forecast));
+    REQUIRE(shocked_result.points.front().momentum_forecast ==
+            Approx(ordinary_result.points.front().momentum_forecast));
+    REQUIRE(shocked_result.points.front().mean_reversion_forecast ==
+            Approx(ordinary_result.points.front().mean_reversion_forecast));
     REQUIRE(shocked_result.points.front().actual_price == 500.0);
 }
 
@@ -82,12 +91,16 @@ TEST_CASE("backtest aggregates forecast errors and coverage",
     const auto result = mc::forecasting::walk_forward_backtest(prices, config);
 
     REQUIRE(result.points.size() == 6);
-    REQUIRE(std::isfinite(result.mean_absolute_error));
-    REQUIRE(std::isfinite(result.root_mean_squared_error));
-    REQUIRE(std::isfinite(result.mean_absolute_percentage_error));
-    REQUIRE(result.root_mean_squared_error >= result.mean_absolute_error);
-    REQUIRE(result.directional_accuracy >= 0.0);
-    REQUIRE(result.directional_accuracy <= 1.0);
+    REQUIRE(std::isfinite(result.selected_model.mean_absolute_error));
+    REQUIRE(std::isfinite(result.selected_model.root_mean_squared_error));
+    REQUIRE(std::isfinite(
+        result.selected_model.mean_absolute_percentage_error));
+    REQUIRE(result.selected_model.root_mean_squared_error >=
+            result.selected_model.mean_absolute_error);
+    REQUIRE(result.selected_model.directional_accuracy >= 0.0);
+    REQUIRE(result.selected_model.directional_accuracy <= 1.0);
+    REQUIRE(std::isfinite(result.momentum.mean_absolute_error));
+    REQUIRE(std::isfinite(result.mean_reversion.mean_absolute_error));
     REQUIRE(result.interval_coverage >= 0.0);
     REQUIRE(result.interval_coverage <= 1.0);
     REQUIRE(result.mean_interval_width > 0.0);
@@ -109,10 +122,29 @@ TEST_CASE("zero-drift backtests use the latest price as the point forecast",
     for (const auto& point : result.points) {
         REQUIRE(point.forecast_price == Approx(point.current_price));
     }
-    REQUIRE(result.mean_absolute_error ==
-            Approx(result.baseline_mean_absolute_error));
-    REQUIRE(result.root_mean_squared_error ==
-            Approx(result.baseline_root_mean_squared_error));
+    REQUIRE(result.selected_model.mean_absolute_error ==
+            Approx(result.latest_price.mean_absolute_error));
+    REQUIRE(result.selected_model.root_mean_squared_error ==
+            Approx(result.latest_price.root_mean_squared_error));
+    REQUIRE(result.selected_model.directional_predictions == 0);
+}
+
+TEST_CASE("benchmark forecasts use only trailing prices",
+          "[forecasting][backtest][baseline]") {
+    using Catch::Approx;
+
+    const std::array prices{100.0, 110.0, 121.0, 133.1, 146.41, 161.051};
+    const mc::forecasting::BacktestConfig config{3, 1, 1, 252.0};
+    const auto result = mc::forecasting::walk_forward_backtest(prices, config);
+    const auto& first = result.points.front();
+
+    REQUIRE(first.current_price == Approx(133.1));
+    REQUIRE(first.latest_price_forecast == Approx(133.1));
+    REQUIRE(first.zero_drift_forecast == Approx(133.1));
+    REQUIRE(first.historical_drift_forecast == Approx(146.41));
+    REQUIRE(first.momentum_forecast == Approx(146.41));
+    REQUIRE(first.mean_reversion_forecast < first.current_price);
+    REQUIRE(first.mean_reversion_forecast > prices.front());
 }
 
 TEST_CASE("backtest rejects invalid configurations and histories",

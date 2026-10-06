@@ -27,17 +27,29 @@ struct BacktestPoint {
     double actual_price{};
     double lower_95{};
     double upper_95{};
+    double latest_price_forecast{};
+    double historical_drift_forecast{};
+    double zero_drift_forecast{};
+    double momentum_forecast{};
+    double mean_reversion_forecast{};
+};
+
+struct ForecastErrorMetrics {
+    double mean_absolute_error{};
+    double root_mean_squared_error{};
+    double mean_absolute_percentage_error{};
+    std::size_t directional_predictions{};
+    double directional_accuracy{};
 };
 
 struct BacktestResult {
     std::vector<BacktestPoint> points;
-    double mean_absolute_error{};
-    double root_mean_squared_error{};
-    double mean_absolute_percentage_error{};
-    double baseline_mean_absolute_error{};
-    double baseline_root_mean_squared_error{};
-    double baseline_mean_absolute_percentage_error{};
-    double directional_accuracy{};
+    ForecastErrorMetrics selected_model;
+    ForecastErrorMetrics latest_price;
+    ForecastErrorMetrics historical_drift;
+    ForecastErrorMetrics zero_drift;
+    ForecastErrorMetrics momentum;
+    ForecastErrorMetrics mean_reversion;
     double interval_coverage{};
     double mean_interval_width{};
 };

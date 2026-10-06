@@ -134,10 +134,11 @@ Run a rolling, no-lookahead evaluation against a latest-price baseline:
 ```
 
 The report includes MAE, RMSE, MAPE, directional accuracy, and 95% interval
-coverage. A step shorter than the horizon creates overlapping targets; use a
-step equal to the horizon for a smaller non-overlapping evaluation. The same
-volatility-model options work here, making interval calibration directly
-comparable.
+coverage. It compares the selected GBM with unchanged-price, historical-drift,
+zero-drift, 20-day momentum, and mean-reversion baselines. The benchmark window
+is capped by the model lookback. A step shorter than the horizon creates
+overlapping targets; use a step equal to the horizon for a smaller
+non-overlapping evaluation.
 
 ## Method
 

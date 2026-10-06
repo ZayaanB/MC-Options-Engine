@@ -143,3 +143,8 @@ MAPE scales absolute error by `A_i`. Directional accuracy compares the signs of
 `F_i-S_i` and `A_i-S_i`; coverage is the share of realized prices inside the
 model's 95% interval. Every fit ends at its forecast origin, so future values
 never enter its training window.
+
+Momentum extends the trailing 20-day log-price change across the forecast
+horizon. Mean reversion moves log price toward that window's mean, with the
+fraction capped at one. Shorter lookbacks cap both benchmark windows. Neither
+baseline is used by the pricing engine.
