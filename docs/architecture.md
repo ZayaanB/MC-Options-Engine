@@ -78,5 +78,7 @@ growth to zero, or shrink it toward zero by a configured fraction. Historical
 drift remains the default.
 
 The walk-forward evaluator repeatedly fits the model through a forecast origin
-and scores only later prices. It compares the expected-price forecast with a
-latest-price baseline. The configurable step controls whether targets overlap.
+and scores only later prices. It compares the expected-price forecast with
+latest-price, historical- and zero-drift GBM, log-price momentum, and trailing
+mean-reversion baselines. The configurable step controls whether targets
+overlap.
