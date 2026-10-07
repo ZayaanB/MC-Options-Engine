@@ -48,6 +48,18 @@ double parse_positive_double(const std::string_view text,
     return value;
 }
 
+std::uint64_t parse_unsigned(const std::string_view text,
+                             const std::string_view option) {
+    std::uint64_t value{};
+    const auto [end, error] =
+        std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size()) {
+        throw std::invalid_argument{std::string{option} +
+                                    " requires an unsigned integer"};
+    }
+    return value;
+}
+
 }
 
 BacktestOptions parse_backtest_options(
@@ -95,6 +107,12 @@ BacktestOptions parse_backtest_options(
         } else if (argument == "--drift-shrinkage") {
             options.config.drift_shrinkage = parse_drift_shrinkage(
                 take_value(arguments, index, argument));
+        } else if (argument == "--bootstrap-samples") {
+            options.config.bootstrap_samples = parse_positive_size(
+                take_value(arguments, index, argument), argument);
+        } else if (argument == "--bootstrap-seed") {
+            options.config.bootstrap_seed = parse_unsigned(
+                take_value(arguments, index, argument), argument);
         } else {
             throw std::invalid_argument{"unknown option: " + std::string{argument}};
         }
@@ -117,6 +135,10 @@ BacktestOptions parse_backtest_options(
             forecasting::DriftEstimator::shrinkage) {
         throw std::invalid_argument{
             "--drift-shrinkage requires --drift-model shrinkage"};
+    }
+    if (options.config.bootstrap_samples < 100) {
+        throw std::invalid_argument{
+            "--bootstrap-samples must be at least 100"};
     }
     return options;
 }

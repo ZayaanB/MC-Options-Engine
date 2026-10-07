@@ -81,4 +81,6 @@ The walk-forward evaluator repeatedly fits the model through a forecast origin
 and scores only later prices. It compares the expected-price forecast with
 latest-price, historical- and zero-drift GBM, log-price momentum, and trailing
 mean-reversion baselines. The configurable step controls whether targets
-overlap.
+overlap. Paired moving-block resampling quantifies uncertainty in MAE improvement
+without separating forecasts that share the same realized price. Probability
+calibration and central interval scores evaluate the full forecast distribution.

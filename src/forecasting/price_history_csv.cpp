@@ -17,6 +17,7 @@ std::vector<std::string> parse_row(const std::string_view row,
     std::vector<std::string> fields;
     std::string field;
     bool quoted = false;
+    bool closed_quote = false;
 
     for (std::size_t index = 0; index < row.size(); ++index) {
         const char character = row[index];
@@ -27,6 +28,7 @@ std::vector<std::string> parse_row(const std::string_view row,
                     ++index;
                 } else {
                     quoted = false;
+                    closed_quote = true;
                 }
             } else {
                 field.push_back(character);
@@ -34,6 +36,10 @@ std::vector<std::string> parse_row(const std::string_view row,
         } else if (character == ',') {
             fields.push_back(field);
             field.clear();
+            closed_quote = false;
+        } else if (closed_quote || (character == '"' && !field.empty())) {
+            throw std::invalid_argument{"malformed quoted field on CSV line " +
+                                        std::to_string(line_number)};
         } else if (character == '"' && field.empty()) {
             quoted = true;
         } else {
@@ -50,10 +56,17 @@ std::vector<std::string> parse_row(const std::string_view row,
 
 std::size_t find_column(const std::vector<std::string>& header,
                         const std::string_view name) {
+    std::size_t match = header.size();
     for (std::size_t index = 0; index < header.size(); ++index) {
         if (header[index] == name) {
-            return index;
+            if (match != header.size()) {
+                throw std::invalid_argument{"duplicate CSV column: " + std::string{name}};
+            }
+            match = index;
         }
+    }
+    if (match != header.size()) {
+        return match;
     }
     throw std::invalid_argument{"CSV is missing required column: " + std::string{name}};
 }

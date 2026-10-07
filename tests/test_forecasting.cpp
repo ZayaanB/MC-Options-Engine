@@ -8,6 +8,21 @@
 
 #include "mc/forecasting/historical_gbm.hpp"
 
+TEST_CASE("flat deterministic history has no chance of a strict rise", "[forecasting]") {
+    const std::array prices{100.0, 100.0, 100.0};
+    const auto model = mc::forecasting::estimate_historical_gbm(prices);
+    REQUIRE(mc::forecasting::forecast_price(model, 100.0, 20)
+                .probability_above_current == 0.0);
+}
+
+TEST_CASE("finite extreme prices do not overflow log return ratios", "[forecasting]") {
+    const std::array prices{1e-200, 1e200, 1e-200};
+    REQUIRE(std::isfinite(mc::forecasting::estimate_historical_gbm(prices)
+                             .daily_volatility));
+    REQUIRE(std::isfinite(mc::forecasting::estimate_ewma_gbm(prices, 0.94)
+                             .daily_volatility));
+}
+
 TEST_CASE("historical GBM estimates log-return parameters", "[forecasting]") {
     using Catch::Approx;
 
@@ -43,6 +58,14 @@ TEST_CASE("forecast reports the moments and interval of its lognormal model",
     REQUIRE(result.expected_price ==
             Approx(100.0 * std::exp(log_mean + 0.5 * log_standard_deviation *
                                                    log_standard_deviation)));
+    REQUIRE(result.lower_80 == Approx(100.0 * std::exp(
+        log_mean - 1.2815515655446004 * log_standard_deviation)));
+    REQUIRE(result.upper_80 == Approx(100.0 * std::exp(
+        log_mean + 1.2815515655446004 * log_standard_deviation)));
+    REQUIRE(result.lower_90 == Approx(100.0 * std::exp(
+        log_mean - 1.6448536269514722 * log_standard_deviation)));
+    REQUIRE(result.upper_90 == Approx(100.0 * std::exp(
+        log_mean + 1.6448536269514722 * log_standard_deviation)));
     REQUIRE(result.lower_95 == Approx(100.0 * std::exp(log_mean -
                                                        1.959963984540054 *
                                                            log_standard_deviation)));
@@ -138,6 +161,10 @@ TEST_CASE("deterministic historical returns produce deterministic forecasts",
     REQUIRE(model.daily_volatility == Approx(0.0).margin(1e-15));
     REQUIRE(result.expected_price == Approx(161.051));
     REQUIRE(result.median_price == Approx(161.051));
+    REQUIRE(result.lower_80 == Approx(161.051));
+    REQUIRE(result.upper_80 == Approx(161.051));
+    REQUIRE(result.lower_90 == Approx(161.051));
+    REQUIRE(result.upper_90 == Approx(161.051));
     REQUIRE(result.lower_95 == Approx(161.051));
     REQUIRE(result.upper_95 == Approx(161.051));
     REQUIRE(result.probability_above_current == 1.0);

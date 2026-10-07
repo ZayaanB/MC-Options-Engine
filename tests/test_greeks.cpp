@@ -92,6 +92,9 @@ TEST_CASE("Greek bumps are configurable and fixed configurations are reproducibl
 TEST_CASE("Greeks engine rejects invalid central-difference bumps", "[greeks][validation]") {
     const mc::EuropeanCall call{kOption.strike};
     const mc::GreeksEngine engine;
+    REQUIRE_THROWS_AS(engine.calculate(call, kMarket, kOption, kSimulation,
+                                       {.spot_bump = 1e-300, .volatility_bump = 0.01}),
+                      std::invalid_argument);
 
     REQUIRE_THROWS_AS(engine.calculate(call, kMarket, kOption, kSimulation,
                                        {.spot_bump = 0.0, .volatility_bump = 0.01}),
@@ -100,14 +103,22 @@ TEST_CASE("Greeks engine rejects invalid central-difference bumps", "[greeks][va
                                        {.spot_bump = kMarket.spot,
                                         .volatility_bump = 0.01}),
                       std::invalid_argument);
-    REQUIRE_THROWS_AS(engine.calculate(call, kMarket, kOption, kSimulation,
-                                       {.spot_bump = 1.0, .volatility_bump = 0.21}),
-                      std::invalid_argument);
     REQUIRE_THROWS_AS(
         engine.calculate(call, kMarket, kOption, kSimulation,
                          {.spot_bump = 1.0,
                           .volatility_bump = std::numeric_limits<double>::infinity()}),
         std::invalid_argument);
+}
+
+TEST_CASE("Vega supports the zero volatility boundary", "[greeks]") {
+    const mc::EuropeanCall call{100.0};
+    const mc::MarketData market{100.0, 0.0, 0.0};
+    const mc::OptionParameters option{100.0, 1.0};
+    const mc::SimulationConfig simulation{100'000, 42, 1, 0, true};
+    const auto result = mc::GreeksEngine{}.calculate(call, market, option, simulation);
+    REQUIRE(std::isfinite(result.delta));
+    REQUIRE(std::isfinite(result.gamma));
+    REQUIRE(result.vega == Catch::Approx(100.0 / std::sqrt(2.0 * kPi) * 0.01).margin(0.005));
 }
 
 TEST_CASE("common random numbers reduce Monte Carlo Delta variance", "[greeks][rng]") {

@@ -22,6 +22,11 @@ GeometricBrownianMotion::GeometricBrownianMotion(const MarketData& market,
     }
 
     initial_price_ = market.spot;
+    num_steps_ = num_steps;
+    if (maturity == 0.0) {
+        discount_factor_ = 1.0;
+        return;
+    }
     time_step_ = maturity / static_cast<double>(num_steps);
     step_drift_ =
         (market.risk_free_rate - 0.5 * market.volatility * market.volatility) * time_step_;

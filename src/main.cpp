@@ -70,6 +70,8 @@ Backtest options:
   --ewma-decay VALUE            EWMA decay in (0,1) (default: 0.94)
   --drift-model MODEL           historical|zero|shrinkage (default: historical)
   --drift-shrinkage VALUE       Fraction of drift removed in [0,1] (default: 0.5)
+  --bootstrap-samples N         Paired bootstrap samples (default: 10000)
+  --bootstrap-seed N            Unsigned bootstrap seed (default: 42)
 
 General:
   --help                        Show this help
@@ -255,8 +257,33 @@ void print_error_metrics(const std::string_view label,
         std::cout << "unavailable (no directional forecasts)\n";
     } else {
         std::cout << metrics.directional_accuracy * 100.0 << "% ("
-                  << metrics.directional_predictions << " forecasts)\n";
+                  << metrics.directionally_correct << "/"
+                  << metrics.directional_predictions << ", 95% Wilson ["
+                  << metrics.directional_lower_95 * 100.0 << "%, "
+                  << metrics.directional_upper_95 * 100.0 << "%]; assumes independent trials)\n";
     }
+}
+
+void print_interval_metrics(
+    const std::string_view label,
+    const mc::forecasting::IntervalMetrics& metrics) {
+    std::cout << label << " interval\n"
+              << "  Coverage:              " << metrics.coverage * 100.0 << "%\n"
+              << "  Mean width:            " << metrics.mean_width << '\n'
+              << "  Mean interval score:   " << metrics.mean_interval_score << '\n';
+}
+
+std::string_view conclusion_name(
+    const mc::forecasting::ComparisonConclusion conclusion) noexcept {
+    switch (conclusion) {
+        case mc::forecasting::ComparisonConclusion::better:
+            return "better";
+        case mc::forecasting::ComparisonConclusion::worse:
+            return "worse";
+        case mc::forecasting::ComparisonConclusion::inconclusive:
+            return "inconclusive";
+    }
+    return "unknown";
 }
 
 void run_backtest(const mc::cli::BacktestOptions& options) {
@@ -302,6 +329,9 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
     std::cout << "Benchmark window:        "
               << std::min<std::size_t>(20, options.config.lookback_days)
               << " trading days\n"
+              << "Bootstrap samples:       "
+              << options.config.bootstrap_samples << '\n'
+              << "Bootstrap seed:          " << options.config.bootstrap_seed << '\n'
               << "Overlapping targets:     "
               << (options.config.step_days < options.config.horizon_days ? "yes" : "no")
               << "\n\n";
@@ -312,18 +342,45 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
     print_error_metrics("Zero-drift GBM baseline", result.zero_drift);
     print_error_metrics("Momentum baseline", result.momentum);
     print_error_metrics("Mean-reversion baseline", result.mean_reversion);
-    if (result.latest_price.mean_absolute_error == 0.0) {
-        std::cout << "MAE improvement:         unavailable (zero baseline error)\n";
+    std::cout << "\nPaired MAE comparison with latest-price baseline\n"
+              << "  Absolute improvement:  "
+              << result.mae_improvement.absolute_improvement << '\n';
+    if (std::isfinite(result.mae_improvement.relative_improvement)) {
+        std::cout << "  Relative improvement:  "
+                  << result.mae_improvement.relative_improvement * 100.0
+                  << "%\n";
     } else {
-        std::cout << "MAE improvement:         "
-                  << 100.0 * (result.latest_price.mean_absolute_error -
-                              result.selected_model.mean_absolute_error) /
-                         result.latest_price.mean_absolute_error
+        std::cout << "  Relative improvement:  unavailable (zero baseline error)\n";
+    }
+    if (std::isfinite(result.mae_improvement.lower_95)) {
+        std::cout << "  95% bootstrap interval:["
+              << result.mae_improvement.lower_95 << ", "
+              << result.mae_improvement.upper_95 << "]\n";
+    } else {
+        std::cout << "  95% bootstrap interval:unavailable (fewer than 10 effective blocks)\n";
+    }
+    std::cout << "  Block length:          "
+              << result.mae_improvement.block_length << '\n'
+              << "  Conclusion:            "
+              << conclusion_name(result.mae_improvement.conclusion) << "\n\n";
+    print_interval_metrics("80%", result.interval_80);
+    print_interval_metrics("90%", result.interval_90);
+    print_interval_metrics("95%", result.interval_95);
+    std::cout << "Probability above current\n"
+              << "  Brier score:           "
+              << result.probability.brier_score << '\n'
+              << "  Calibration:\n";
+    for (const auto& bucket : result.probability.calibration) {
+        if (bucket.observations == 0) {
+            continue;
+        }
+        std::cout << "    [" << bucket.lower_probability * 100.0 << "%, "
+                  << bucket.upper_probability * 100.0 << "%]: n="
+                  << bucket.observations << ", mean forecast="
+                  << bucket.mean_forecast_probability * 100.0
+                  << "%, observed above=" << bucket.observed_frequency * 100.0
                   << "%\n";
     }
-    std::cout << "95% interval coverage:   " << result.interval_coverage * 100.0
-              << "%\n"
-              << "Mean interval width:     " << result.mean_interval_width << '\n';
 }
 
 }

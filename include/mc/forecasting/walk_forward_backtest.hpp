@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -17,6 +18,8 @@ struct BacktestConfig {
     double ewma_decay{0.94};
     DriftEstimator drift_estimator{DriftEstimator::historical};
     double drift_shrinkage{0.5};
+    std::size_t bootstrap_samples{10'000};
+    std::uint64_t bootstrap_seed{42};
 };
 
 struct BacktestPoint {
@@ -25,8 +28,13 @@ struct BacktestPoint {
     double current_price{};
     double forecast_price{};
     double actual_price{};
+    double lower_80{};
+    double upper_80{};
+    double lower_90{};
+    double upper_90{};
     double lower_95{};
     double upper_95{};
+    double probability_above_current{};
     double latest_price_forecast{};
     double historical_drift_forecast{};
     double zero_drift_forecast{};
@@ -39,7 +47,42 @@ struct ForecastErrorMetrics {
     double root_mean_squared_error{};
     double mean_absolute_percentage_error{};
     std::size_t directional_predictions{};
+    std::size_t directionally_correct{};
     double directional_accuracy{};
+    double directional_lower_95{};
+    double directional_upper_95{};
+};
+
+enum class ComparisonConclusion { better, worse, inconclusive };
+
+struct MaeImprovementEstimate {
+    double absolute_improvement{};
+    double relative_improvement{};
+    double lower_95{};
+    double upper_95{};
+    std::size_t bootstrap_samples{};
+    std::uint64_t bootstrap_seed{};
+    std::size_t block_length{};
+    ComparisonConclusion conclusion{ComparisonConclusion::inconclusive};
+};
+
+struct IntervalMetrics {
+    double coverage{};
+    double mean_width{};
+    double mean_interval_score{};
+};
+
+struct CalibrationBucket {
+    double lower_probability{};
+    double upper_probability{};
+    std::size_t observations{};
+    double mean_forecast_probability{};
+    double observed_frequency{};
+};
+
+struct ProbabilityMetrics {
+    double brier_score{};
+    std::vector<CalibrationBucket> calibration;
 };
 
 struct BacktestResult {
@@ -50,8 +93,11 @@ struct BacktestResult {
     ForecastErrorMetrics zero_drift;
     ForecastErrorMetrics momentum;
     ForecastErrorMetrics mean_reversion;
-    double interval_coverage{};
-    double mean_interval_width{};
+    MaeImprovementEstimate mae_improvement;
+    IntervalMetrics interval_80;
+    IntervalMetrics interval_90;
+    IntervalMetrics interval_95;
+    ProbabilityMetrics probability;
 };
 
 [[nodiscard]] BacktestResult walk_forward_backtest(

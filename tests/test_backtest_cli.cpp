@@ -18,6 +18,8 @@ TEST_CASE("backtest CLI parses rolling evaluation options", "[backtest-cli]") {
         std::string_view{"--ewma-decay"}, std::string_view{"0.97"},
         std::string_view{"--drift-model"}, std::string_view{"shrinkage"},
         std::string_view{"--drift-shrinkage"}, std::string_view{"0.25"},
+        std::string_view{"--bootstrap-samples"}, std::string_view{"5000"},
+        std::string_view{"--bootstrap-seed"}, std::string_view{"123"},
     };
     const auto options = mc::cli::parse_backtest_options(arguments);
 
@@ -33,6 +35,8 @@ TEST_CASE("backtest CLI parses rolling evaluation options", "[backtest-cli]") {
     REQUIRE(options.config.drift_estimator ==
             mc::forecasting::DriftEstimator::shrinkage);
     REQUIRE(options.config.drift_shrinkage == 0.25);
+    REQUIRE(options.config.bootstrap_samples == 5000);
+    REQUIRE(options.config.bootstrap_seed == 123);
 }
 
 TEST_CASE("backtest CLI uses rolling defaults", "[backtest-cli]") {
@@ -51,6 +55,8 @@ TEST_CASE("backtest CLI uses rolling defaults", "[backtest-cli]") {
     REQUIRE(options.config.drift_estimator ==
             mc::forecasting::DriftEstimator::historical);
     REQUIRE(options.config.drift_shrinkage == 0.5);
+    REQUIRE(options.config.bootstrap_samples == 10'000);
+    REQUIRE(options.config.bootstrap_seed == 42);
 }
 
 TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]") {
@@ -77,6 +83,12 @@ TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]
     constexpr std::array unused_shrinkage{
         std::string_view{"--csv"}, std::string_view{"prices.csv"},
         std::string_view{"--drift-shrinkage"}, std::string_view{"0.5"}};
+    constexpr std::array too_few_bootstraps{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--bootstrap-samples"}, std::string_view{"99"}};
+    constexpr std::array bad_bootstrap_seed{
+        std::string_view{"--csv"}, std::string_view{"prices.csv"},
+        std::string_view{"--bootstrap-seed"}, std::string_view{"-1"}};
 
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(missing_csv),
                       std::invalid_argument);
@@ -93,5 +105,9 @@ TEST_CASE("backtest CLI rejects malformed requests", "[backtest-cli][validation]
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(bad_drift),
                       std::invalid_argument);
     REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(unused_shrinkage),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(too_few_bootstraps),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(bad_bootstrap_seed),
                       std::invalid_argument);
 }
