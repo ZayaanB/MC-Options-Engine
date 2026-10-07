@@ -142,4 +142,9 @@ if(BUILD_TESTING)
     mc_enable_warnings(mc_tests)
 
     add_test(NAME mc_tests COMMAND mc_tests)
+    add_test(NAME history_cli_workflow
+        COMMAND ${CMAKE_COMMAND}
+            -DCLI=$<TARGET_FILE:mcprice>
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/history_cli_workflow.cmake)
 endif()

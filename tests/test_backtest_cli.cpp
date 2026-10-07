@@ -6,6 +6,14 @@
 
 #include "mc/cli/backtest_options.hpp"
 
+TEST_CASE("backtest CLI accepts provenance metadata", "[backtest-cli]") {
+    const std::array<std::string_view, 4> arguments{
+        "--csv", "prices.csv", "--metadata", "prices.meta"};
+    REQUIRE(mc::cli::parse_backtest_options(arguments).metadata_path == "prices.meta");
+    const std::array<std::string_view, 4> empty{"--csv", "prices.csv", "--metadata", ""};
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(empty), std::invalid_argument);
+}
+
 TEST_CASE("backtest CLI parses rolling evaluation options", "[backtest-cli]") {
     constexpr std::array arguments{
         std::string_view{"--csv"}, std::string_view{"aapl.csv"},

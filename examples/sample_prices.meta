@@ -1,0 +1,7 @@
+provider=Repository synthetic fixture
+symbol=SYNTHETIC
+adjustment=none; synthetic values, not stock prices
+retrieved_on=2026-10-07
+source_url=local:examples/sample_prices.csv
+price_column=Adj Close
+frequency=daily

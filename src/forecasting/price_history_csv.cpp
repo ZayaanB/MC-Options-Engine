@@ -1,12 +1,15 @@
 #include "mc/forecasting/price_history_csv.hpp"
 
 #include <charconv>
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace mc::forecasting {
@@ -100,7 +103,8 @@ unsigned digit(const char value, const std::size_t line_number) {
     return static_cast<unsigned>(value - '0');
 }
 
-void validate_date(const std::string& value, const std::size_t line_number) {
+std::chrono::sys_days validate_date(const std::string& value,
+                                    const std::size_t line_number) {
     if (value.size() != 10 || value[4] != '-' || value[7] != '-') {
         throw std::invalid_argument{
             "invalid Date value on CSV line " + std::to_string(line_number) +
@@ -123,8 +127,103 @@ void validate_date(const std::string& value, const std::size_t line_number) {
             "invalid Date value on CSV line " + std::to_string(line_number) +
             "; expected YYYY-MM-DD"};
     }
+    return std::chrono::sys_days{date};
 }
 
+}
+
+PriceHistoryMetadata read_price_history_metadata(std::istream& input) {
+    PriceHistoryMetadata metadata{};
+    const std::array<std::pair<std::string_view, std::string*>, 7> fields{{
+        {"provider", &metadata.provider}, {"symbol", &metadata.symbol},
+        {"adjustment", &metadata.adjustment}, {"retrieved_on", &metadata.retrieved_on},
+        {"source_url", &metadata.source_url}, {"price_column", &metadata.price_column},
+        {"frequency", &metadata.frequency}}};
+    std::string line;
+    while (std::getline(input, line)) {
+        remove_carriage_return(line);
+        if (line.empty()) {
+            continue;
+        }
+        const auto separator = line.find('=');
+        if (separator == std::string::npos || separator + 1 == line.size()) {
+            throw std::invalid_argument{"metadata requires nonempty key=value lines"};
+        }
+        const auto key = std::string_view{line}.substr(0, separator);
+        const auto found = std::find_if(fields.begin(), fields.end(),
+                                       [key](const auto& field) { return field.first == key; });
+        if (found == fields.end() || !found->second->empty()) {
+            throw std::invalid_argument{"unknown or duplicate metadata key"};
+        }
+        *found->second = line.substr(separator + 1);
+        if (found->second->find_first_not_of(" \t") == std::string::npos) {
+            throw std::invalid_argument{"metadata values must not be blank"};
+        }
+    }
+    if (input.bad()) {
+        throw std::runtime_error{"failed while reading metadata"};
+    }
+    for (const auto& field : fields) {
+        if (field.second->empty()) {
+            throw std::invalid_argument{"metadata requires all seven provenance keys"};
+        }
+    }
+    validate_date(metadata.retrieved_on, 0);
+    if (metadata.frequency != "daily") {
+        throw std::invalid_argument{"forecast history metadata frequency must be daily"};
+    }
+    return metadata;
+}
+
+PriceHistoryMetadata load_price_history_metadata(const std::string& path) {
+    std::ifstream input{path};
+    if (!input) {
+        throw std::invalid_argument{"could not open metadata file: " + path};
+    }
+    return read_price_history_metadata(input);
+}
+
+HistoryDiagnostics diagnose_history(const std::span<const std::string> dates) {
+    HistoryDiagnostics result;
+    std::optional<std::chrono::sys_days> previous;
+    for (std::size_t index = 0; index < dates.size(); ++index) {
+        const auto date = validate_date(dates[index], index + 2);
+        const std::chrono::weekday weekday{date};
+        if (weekday == std::chrono::Saturday || weekday == std::chrono::Sunday) {
+            ++result.weekend_rows;
+        }
+        if (previous) {
+            const auto gap = (date - *previous).count();
+            if (gap <= 0) {
+                throw std::invalid_argument{"history dates must be strictly increasing"};
+            }
+            const auto gap_days = static_cast<std::size_t>(gap);
+            result.maximum_gap_days = std::max(result.maximum_gap_days, gap_days);
+            if (gap_days > 4) {
+                ++result.gaps_over_four_days;
+            }
+        }
+        previous = date;
+    }
+    return result;
+}
+
+std::span<const double> forecast_training_prices(
+    const std::span<const double> prices,
+    const std::optional<std::size_t> lookback_days) {
+    if (lookback_days) {
+        if (*lookback_days < 2) {
+            throw std::invalid_argument{"forecast lookback must be at least two returns"};
+        }
+        if (*lookback_days >= prices.size()) {
+            throw std::invalid_argument{"insufficient history for requested forecast lookback"};
+        }
+        return prices.last(*lookback_days + 1);
+    }
+    if (prices.size() < 3) {
+        throw std::invalid_argument{"forecast requires at least three prices"};
+    }
+    return prices;
 }
 
 PriceHistory read_price_history_csv(std::istream& input,

@@ -1,11 +1,82 @@
 #include <sstream>
+#include <array>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "mc/forecasting/price_history_csv.hpp"
+
+TEST_CASE("history diagnostics flag suspicious cadence without rewriting dates", "[forecasting][csv]") {
+    const std::array<std::string, 4> daily{"2024-01-12", "2024-01-16", "2024-01-17", "2024-01-18"};
+    const auto ordinary = mc::forecasting::diagnose_history(daily);
+    REQUIRE(ordinary.weekend_rows == 0);
+    REQUIRE(ordinary.gaps_over_four_days == 0);
+    REQUIRE(ordinary.maximum_gap_days == 4);
+    const std::array<std::string, 3> suspicious{"2024-01-05", "2024-01-06", "2024-02-06"};
+    const auto diagnostics = mc::forecasting::diagnose_history(suspicious);
+    REQUIRE(diagnostics.weekend_rows == 1);
+    REQUIRE(diagnostics.gaps_over_four_days == 1);
+    REQUIRE(diagnostics.maximum_gap_days == 31);
+    REQUIRE(mc::forecasting::diagnose_history({}).maximum_gap_days == 0);
+    const std::array<std::string, 2> duplicate{"2024-01-05", "2024-01-05"};
+    REQUIRE_THROWS_AS(mc::forecasting::diagnose_history(duplicate), std::invalid_argument);
+    const std::array<std::string, 1> invalid{"2024-02-30"};
+    REQUIRE_THROWS_AS(mc::forecasting::diagnose_history(invalid), std::invalid_argument);
+}
+
+TEST_CASE("forecast lookback counts returns rather than prices", "[forecasting][csv]") {
+    const std::array prices{1.0, 2.0, 3.0, 4.0, 5.0};
+    const auto training = mc::forecasting::forecast_training_prices(prices, 2);
+    REQUIRE(training.size() == 3);
+    REQUIRE(training.front() == 3.0);
+    REQUIRE(training.back() == 5.0);
+    REQUIRE(training.data() == prices.data() + 2);
+    REQUIRE(mc::forecasting::forecast_training_prices(prices, std::nullopt).size() == 5);
+    REQUIRE(mc::forecasting::forecast_training_prices(prices, 4).size() == 5);
+    for (const std::size_t invalid : {std::size_t{0}, std::size_t{1}, std::size_t{5},
+                                    std::numeric_limits<std::size_t>::max()}) {
+        REQUIRE_THROWS_AS(mc::forecasting::forecast_training_prices(prices, invalid),
+                          std::invalid_argument);
+    }
+    REQUIRE_THROWS_AS(mc::forecasting::forecast_training_prices({}, std::nullopt),
+                      std::invalid_argument);
+}
+
+TEST_CASE("daily history metadata preserves provider adjustment semantics", "[forecasting][csv]") {
+    const std::string valid =
+        "provider=Example\nsymbol=AAPL\nadjustment=split and dividend adjusted\n"
+        "retrieved_on=2026-10-07\nsource_url=https://example.test/prices?a=1\n"
+        "price_column=Close\nfrequency=daily\n";
+    std::istringstream input{valid};
+    const auto metadata = mc::forecasting::read_price_history_metadata(input);
+    REQUIRE(metadata.provider == "Example");
+    REQUIRE(metadata.symbol == "AAPL");
+    REQUIRE(metadata.adjustment == "split and dividend adjusted");
+    REQUIRE(metadata.retrieved_on == "2026-10-07");
+    REQUIRE(metadata.source_url == "https://example.test/prices?a=1");
+    REQUIRE(metadata.price_column == "Close");
+    REQUIRE(metadata.frequency == "daily");
+    for (const auto& text : {valid + "symbol=MSFT\n", valid + "extra=value\n",
+                             valid + "bad line\n", std::string{"provider=Example\n"},
+                             std::string{}}) {
+        std::istringstream bad{text};
+        REQUIRE_THROWS_AS(mc::forecasting::read_price_history_metadata(bad),
+                          std::invalid_argument);
+    }
+    for (const auto& replacement : {std::pair{"daily", "monthly"},
+                                    std::pair{"2026-10-07", "2026-02-30"},
+                                    std::pair{"provider=Example", "provider= "}}) {
+        auto text = valid;
+        const auto position = text.find(replacement.first);
+        text.replace(position, std::string{replacement.first}.size(), replacement.second);
+        std::istringstream bad{text};
+        REQUIRE_THROWS_AS(mc::forecasting::read_price_history_metadata(bad), std::invalid_argument);
+    }
+}
 
 TEST_CASE("CSV rejects ambiguous headers and malformed quotes", "[forecasting][csv]") {
     for (const auto* text : {

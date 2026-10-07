@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -12,6 +13,8 @@ namespace mc::cli {
 struct ForecastOptions {
     std::string csv_path;
     std::string price_column{"Adj Close"};
+    std::string metadata_path;
+    std::optional<std::size_t> lookback_days;
     std::size_t horizon_days{20};
     double trading_days_per_year{252.0};
     forecasting::VolatilityEstimator volatility_estimator{
