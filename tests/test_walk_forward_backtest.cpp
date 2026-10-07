@@ -7,6 +7,26 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "mc/forecasting/walk_forward_backtest.hpp"
+#include "mc/forecasting/price_history_csv.hpp"
+
+TEST_CASE("explicit forecast lookbacks match walk-forward training at each origin", "[forecasting][backtest]") {
+    const std::array prices{100.0, 101.0, 99.0, 103.0, 98.0, 104.0, 97.0, 105.0, 96.0};
+    for (const auto estimator : {mc::forecasting::VolatilityEstimator::sample,
+                                 mc::forecasting::VolatilityEstimator::ewma}) {
+        mc::forecasting::BacktestConfig config{4, 2, 1, 252.0};
+        config.volatility_estimator = estimator;
+        const auto backtest = mc::forecasting::walk_forward_backtest(prices, config);
+        for (const auto& point : backtest.points) {
+            const auto available = std::span<const double>{prices}.first(point.origin_index + 1);
+            const auto training = mc::forecasting::forecast_training_prices(available, 4);
+            const auto model = mc::forecasting::estimate_gbm(training, estimator);
+            const auto forecast = mc::forecasting::forecast_price(model, available.back(), 2);
+            REQUIRE(forecast.expected_price == point.forecast_price);
+            REQUIRE(forecast.lower_95 == point.lower_95);
+            REQUIRE(model.return_observations == 4);
+        }
+    }
+}
 
 TEST_CASE("walk-forward backtest never trains beyond its forecast origin",
           "[forecasting][backtest]") {

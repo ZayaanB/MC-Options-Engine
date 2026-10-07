@@ -6,6 +6,21 @@
 
 #include "mc/cli/forecast_options.hpp"
 
+TEST_CASE("forecast CLI accepts an explicit lookback and provenance", "[forecast-cli]") {
+    const std::array<std::string_view, 6> arguments{
+        "--csv", "prices.csv", "--lookback-days", "126", "--metadata", "prices.meta"};
+    const auto options = mc::cli::parse_forecast_options(arguments);
+    REQUIRE(options.lookback_days == 126);
+    REQUIRE(options.metadata_path == "prices.meta");
+    for (const auto value : {"0", "1", "-1", "1.5", "18446744073709551616"}) {
+        const std::array<std::string_view, 4> invalid{
+            "--csv", "prices.csv", "--lookback-days", value};
+        REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(invalid), std::invalid_argument);
+    }
+    const std::array<std::string_view, 4> empty{"--csv", "prices.csv", "--metadata", ""};
+    REQUIRE_THROWS_AS(mc::cli::parse_forecast_options(empty), std::invalid_argument);
+}
+
 TEST_CASE("forecast CLI parses its data and horizon configuration", "[forecast-cli]") {
     constexpr std::array arguments{
         std::string_view{"--csv"}, std::string_view{"prices.csv"},
@@ -37,6 +52,8 @@ TEST_CASE("forecast CLI uses safe defaults", "[forecast-cli]") {
     const auto options = mc::cli::parse_forecast_options(arguments);
 
     REQUIRE(options.price_column == "Adj Close");
+    REQUIRE_FALSE(options.lookback_days.has_value());
+    REQUIRE(options.metadata_path.empty());
     REQUIRE(options.horizon_days == 20);
     REQUIRE(options.trading_days_per_year == 252.0);
     REQUIRE(options.volatility_estimator ==

@@ -71,6 +71,17 @@ ForecastOptions parse_forecast_options(
             options.csv_path = take_value(arguments, index, argument);
         } else if (argument == "--price-column") {
             options.price_column = take_value(arguments, index, argument);
+        } else if (argument == "--metadata") {
+            options.metadata_path = take_value(arguments, index, argument);
+            if (options.metadata_path.empty()) {
+                throw std::invalid_argument{"--metadata must not be empty"};
+            }
+        } else if (argument == "--lookback-days") {
+            options.lookback_days =
+                parse_positive_size(take_value(arguments, index, argument), argument);
+            if (*options.lookback_days < 2) {
+                throw std::invalid_argument{"--lookback-days must be at least two"};
+            }
         } else if (argument == "--horizon-days") {
             options.horizon_days =
                 parse_positive_size(take_value(arguments, index, argument), argument);

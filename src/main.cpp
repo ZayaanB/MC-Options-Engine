@@ -52,6 +52,8 @@ Price options:
 Forecast options:
   --csv FILE                    Historical CSV file with Date and price columns
   --price-column NAME           Price column (default: Adj Close)
+  --metadata FILE               Optional daily-history provenance key=value file
+  --lookback-days N             Fit the latest N returns (default: full history)
   --horizon-days N              Forecast horizon in trading days (default: 20)
   --trading-days N              Trading days per year (default: 252)
   --volatility-model sample|ewma Volatility estimator (default: sample)
@@ -62,6 +64,7 @@ Forecast options:
 Backtest options:
   --csv FILE                    Historical CSV file with Date and price columns
   --price-column NAME           Price column (default: Adj Close)
+  --metadata FILE               Optional daily-history provenance key=value file
   --lookback-days N             Prior returns per model fit (default: 252)
   --horizon-days N              Forecast horizon in trading days (default: 20)
   --step-days N                 Days between forecast origins (default: 1)
@@ -197,11 +200,55 @@ void run_price(const mc::cli::PriceOptions& options) {
     }
 }
 
+std::optional<mc::forecasting::PriceHistoryMetadata> load_metadata(
+    const std::string& path, const std::string& price_column,
+    const std::string& final_date) {
+    if (path.empty()) {
+        return std::nullopt;
+    }
+    auto metadata = mc::forecasting::load_price_history_metadata(path);
+    if (metadata.price_column != price_column) {
+        throw std::invalid_argument{"metadata price_column does not match --price-column"};
+    }
+    if (metadata.retrieved_on < final_date) {
+        throw std::invalid_argument{"metadata retrieval date precedes the final history date"};
+    }
+    return metadata;
+}
+
+void print_history_context(
+    const std::optional<mc::forecasting::PriceHistoryMetadata>& metadata,
+    const mc::forecasting::HistoryDiagnostics& diagnostics) {
+    if (metadata) {
+        std::cout << "Provider (declared):     " << metadata->provider << '\n'
+                  << "Symbol (declared):       " << metadata->symbol << '\n'
+                  << "Adjustment (declared):   " << metadata->adjustment << '\n'
+                  << "Retrieved on:            " << metadata->retrieved_on << '\n'
+                  << "Source URL:              " << metadata->source_url << '\n'
+                  << "Frequency (declared):    " << metadata->frequency << '\n';
+    } else {
+        std::cout << "Provenance:              unspecified; adjustment unverified\n";
+    }
+    std::cout << "Largest calendar gap:    " << diagnostics.maximum_gap_days << " days\n";
+    if (diagnostics.gaps_over_four_days > 0 || diagnostics.weekend_rows > 0) {
+        std::cout << "History warning:         " << diagnostics.gaps_over_four_days
+                  << " gaps over 4 calendar days; " << diagnostics.weekend_rows
+                  << " weekend rows. Check daily cadence and missing sessions.\n";
+    }
+    std::cout << "Calendar check:          heuristic only; no exchange holiday calendar\n";
+}
+
 void run_forecast(const mc::cli::ForecastOptions& options) {
     const auto history =
         mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
+    const auto metadata = load_metadata(options.metadata_path, options.price_column,
+                                        history.dates.back());
+    const auto training = mc::forecasting::forecast_training_prices(
+        history.adjusted_closes, options.lookback_days);
+    const auto training_dates = std::span<const std::string>{history.dates}.last(training.size());
+    const auto diagnostics = mc::forecasting::diagnose_history(training_dates);
     const auto model = mc::forecasting::estimate_gbm(
-        history.adjusted_closes, options.volatility_estimator,
+        training, options.volatility_estimator,
         options.ewma_decay, options.trading_days_per_year,
         options.drift_estimator, options.drift_shrinkage);
     const auto forecast = mc::forecasting::forecast_price(
@@ -213,13 +260,20 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
               << "Scenario only; not an option value or trading signal.\n\n"
               << "CSV:                     " << options.csv_path << '\n'
               << "Price column:            " << options.price_column << '\n'
-              << "History:                 " << history.dates.front() << " to "
+              << "History:                 " << training_dates.front() << " to "
               << history.dates.back() << '\n'
-              << "Price observations:      " << history.adjusted_closes.size() << '\n'
+              << "Price observations:      " << training.size() << '\n'
               << "Return observations:     " << model.return_observations << '\n'
               << "Volatility model:        "
               << mc::cli::volatility_estimator_name(options.volatility_estimator)
               << '\n';
+    print_history_context(metadata, diagnostics);
+    std::cout << "Lookback:                ";
+    if (options.lookback_days) {
+        std::cout << *options.lookback_days << " trading days\n";
+    } else {
+        std::cout << "full history\n";
+    }
     if (options.volatility_estimator ==
         mc::forecasting::VolatilityEstimator::ewma) {
         std::cout << "EWMA decay:              " << options.ewma_decay << '\n';
@@ -231,7 +285,7 @@ void run_forecast(const mc::cli::ForecastOptions& options) {
         std::cout << "Drift shrinkage:         " << options.drift_shrinkage << '\n';
     }
     std::cout
-              << "Current adjusted close:  " << forecast.current_price << '\n'
+              << "Current selected price:  " << forecast.current_price << '\n'
               << "Horizon:                 " << forecast.horizon_days
               << " trading " << trading_day_word(forecast.horizon_days) << '\n'
               << "Annualized drift:        " << model.annualized_drift * 100.0 << "%\n"
@@ -289,6 +343,9 @@ std::string_view conclusion_name(
 void run_backtest(const mc::cli::BacktestOptions& options) {
     const auto history =
         mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
+    const auto metadata = load_metadata(options.metadata_path, options.price_column,
+                                        history.dates.back());
+    const auto diagnostics = mc::forecasting::diagnose_history(history.dates);
     const auto result =
         mc::forecasting::walk_forward_backtest(history.adjusted_closes, options.config);
     const auto& first = result.points.front();
@@ -313,6 +370,7 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
               << mc::cli::volatility_estimator_name(
                      options.config.volatility_estimator)
               << '\n';
+    print_history_context(metadata, diagnostics);
     if (options.config.volatility_estimator ==
         mc::forecasting::VolatilityEstimator::ewma) {
         std::cout << "EWMA decay:              " << options.config.ewma_decay << '\n';

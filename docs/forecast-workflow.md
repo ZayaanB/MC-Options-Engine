@@ -6,8 +6,7 @@ GBM. Historical-bootstrap forecasts have not been implemented yet.
 
 ## 1. Build and check the installation
 
-Use CMake 3.24+ for the current dependency-download path (the project declares
-3.20, but uses a download option added in 3.24). Install a C++20 compiler with support for
+Use CMake 3.20+ and a C++20 compiler with support for
 `std::jthread`, calendar dates, and floating-point `std::from_chars`.
 The first configure needs internet access to download Catch2 unless installed.
 
@@ -52,9 +51,11 @@ unadjusted column to imply adjustment. A `Close` column works with
 price forecasts describe the provider's adjusted-price series, which may differ
 from future quoted dollar prices after corporate actions.
 
-Use daily sessions with no accidental missing rows: the engine counts rows as
-trading days and does not check exchange holidays or detect data gaps. Monthly
-or intraday history does not match the daily horizon convention.
+Use daily sessions with no accidental missing rows. Both commands report the
+largest calendar gap and warn about gaps over four days or weekend rows.
+These are hints, not an exchange calendar: holidays can trigger warnings and
+shorter missing-session gaps can go unnoticed. Rows are never filled or dropped.
+Monthly or intraday history does not match the daily horizon convention.
 
 A forecast needs at least three prices. A backtest needs at least
 `lookback + horizon + 1` prices; that minimum gives only one forecast. Use much
@@ -66,6 +67,25 @@ sha256sum Notes-dont-commit/AAPL.csv
 ```
 
 On macOS use `shasum -a 256` instead.
+
+Keep a companion `AAPL.meta` file with these seven keys, one per line:
+
+```text
+provider=Your data provider
+symbol=AAPL
+adjustment=Describe the provider's split and dividend treatment
+retrieved_on=2026-10-07
+source_url=https://your-provider.example/history
+price_column=Adj Close
+frequency=daily
+```
+
+Replace the example values with your actual export details. Pass the file with
+`--metadata Notes-dont-commit/AAPL.meta` to either command. Unknown, duplicate,
+missing keys, a mismatched price column, non-daily frequency, or a retrieval date
+before the final price date are rejected. Values are declarations, not verified
+provider facts. Without metadata, output marks provenance as unspecified.
+Retain the original CSV, metadata, checksum, command, and toolchain together.
 
 ## 3. Generate the forecast
 
@@ -83,10 +103,17 @@ Try recent-weighted volatility and a 50% reduction in estimated GBM drift:
   --drift-model shrinkage --drift-shrinkage 0.5
 ```
 
-`forecast` fits every row in the supplied file. To fit only the latest year,
-prepare a separate file containing its header and latest 253 daily prices.
-There is no forecast lookback flag. A 20-day horizon means 20 trading sessions
-after the final row, even when that row is years old.
+By default, `forecast` fits every row. Use `--lookback-days 252` to fit the latest
+252 returns from 253 prices, matching a backtest's 252-return rolling window:
+
+```bash
+./build/mcprice forecast --csv Notes-dont-commit/AAPL.csv \
+  --metadata Notes-dont-commit/AAPL.meta --lookback-days 252 --horizon-days 20
+```
+
+Insufficient history is rejected rather than silently shortening the window.
+Output shows the selected training dates and observation counts. A 20-day
+horizon means 20 trading sessions after the final row, even when it is years old.
 
 The expected price is the model's mean; the median is its middle outcome. The
 95% model interval describes future-price uncertainty under fitted assumptions.

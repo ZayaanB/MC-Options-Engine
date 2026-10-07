@@ -112,6 +112,8 @@ column:
 
 ```bash
 ./build/mcprice forecast --csv examples/sample_prices.csv --horizon-days 20
+./build/mcprice forecast --csv examples/sample_prices.csv \
+  --metadata examples/sample_prices.meta --lookback-days 10 --horizon-days 20
 ```
 
 For an exported Apple history, replace the path with your file. Use

@@ -11,6 +11,7 @@ namespace mc::cli {
 struct BacktestOptions {
     std::string csv_path;
     std::string price_column{"Adj Close"};
+    std::string metadata_path;
     forecasting::BacktestConfig config{};
 };
 

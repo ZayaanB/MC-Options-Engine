@@ -69,6 +69,11 @@ Forecasting reads chronological adjusted closes and estimates physical-measure
 log-return drift and volatility. It returns a price distribution, not an option
 value. This module does not feed the risk-neutral pricing engines.
 
+The CSV boundary validates dates and prices. Optional metadata records declared
+provenance and adjustment semantics; calendar-gap diagnostics are heuristic,
+not exchange-calendar validation. Forecast lookbacks select N+1 trailing prices
+for N returns, matching the walk-forward training-window convention.
+
 Forecast volatility can use the full-window sample estimate or normalized EWMA
 weights. Both retain the same historical mean-return estimate. This choice is
 confined to forecasting and does not alter option-pricing market data.
