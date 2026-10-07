@@ -107,10 +107,12 @@ if(BUILD_TESTING)
 
     if(NOT Catch2_FOUND)
         include(FetchContent)
+        if(POLICY CMP0135)
+            cmake_policy(SET CMP0135 NEW)
+        endif()
         FetchContent_Declare(
             Catch2
             URL https://github.com/catchorg/Catch2/archive/refs/tags/v3.15.3.tar.gz
-            DOWNLOAD_EXTRACT_TIMESTAMP FALSE
         )
         FetchContent_MakeAvailable(Catch2)
     endif()

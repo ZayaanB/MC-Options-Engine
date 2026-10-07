@@ -28,8 +28,13 @@ struct BacktestPoint {
     double current_price{};
     double forecast_price{};
     double actual_price{};
+    double lower_80{};
+    double upper_80{};
+    double lower_90{};
+    double upper_90{};
     double lower_95{};
     double upper_95{};
+    double probability_above_current{};
     double latest_price_forecast{};
     double historical_drift_forecast{};
     double zero_drift_forecast{};
@@ -61,6 +66,25 @@ struct MaeImprovementEstimate {
     ComparisonConclusion conclusion{ComparisonConclusion::inconclusive};
 };
 
+struct IntervalMetrics {
+    double coverage{};
+    double mean_width{};
+    double mean_interval_score{};
+};
+
+struct CalibrationBucket {
+    double lower_probability{};
+    double upper_probability{};
+    std::size_t observations{};
+    double mean_forecast_probability{};
+    double observed_frequency{};
+};
+
+struct ProbabilityMetrics {
+    double brier_score{};
+    std::vector<CalibrationBucket> calibration;
+};
+
 struct BacktestResult {
     std::vector<BacktestPoint> points;
     ForecastErrorMetrics selected_model;
@@ -70,8 +94,10 @@ struct BacktestResult {
     ForecastErrorMetrics momentum;
     ForecastErrorMetrics mean_reversion;
     MaeImprovementEstimate mae_improvement;
-    double interval_coverage{};
-    double mean_interval_width{};
+    IntervalMetrics interval_80;
+    IntervalMetrics interval_90;
+    IntervalMetrics interval_95;
+    ProbabilityMetrics probability;
 };
 
 [[nodiscard]] BacktestResult walk_forward_backtest(

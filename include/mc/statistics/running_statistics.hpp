@@ -17,11 +17,16 @@ public:
             throw std::overflow_error{"running statistics sample count overflow"};
         }
 
-        ++count_;
+        const auto next_count = count_ + 1;
         const double delta = value - mean_;
-        mean_ += delta / static_cast<double>(count_);
-        const double delta_from_new_mean = value - mean_;
-        m2_ += delta * delta_from_new_mean;
+        const double next_mean = mean_ + delta / static_cast<double>(next_count);
+        const double next_m2 = m2_ + delta * (value - next_mean);
+        if (!std::isfinite(next_mean) || !std::isfinite(next_m2)) {
+            throw std::overflow_error{"running statistics numeric overflow"};
+        }
+        count_ = next_count;
+        mean_ = next_mean;
+        m2_ = next_m2;
     }
     void merge(const RunningStatistics& other);
 

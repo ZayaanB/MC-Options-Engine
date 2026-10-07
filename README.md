@@ -104,6 +104,9 @@ clear error and a nonzero exit code.
 
 ## Forecast a price range
 
+See the [stock forecasting walkthrough](docs/forecast-workflow.md) for data
+preparation, commands, backtesting, and interpreting results.
+
 Pass a chronological CSV containing ISO `YYYY-MM-DD` dates and an `Adj Close`
 column:
 
@@ -133,14 +136,12 @@ Run a rolling, no-lookahead evaluation against a latest-price baseline:
   --lookback-days 10 --horizon-days 3 --step-days 1
 ```
 
-The report includes MAE, RMSE, MAPE, directional accuracy, and 95% interval
-coverage. It compares the selected GBM with unchanged-price, historical-drift,
-zero-drift, 20-day momentum, and mean-reversion baselines. The benchmark window
-is capped by the model lookback. A step shorter than the horizon creates
-overlapping targets; use a step equal to the horizon for a smaller
-non-overlapping evaluation. Direction scores include Wilson intervals. A
-deterministic paired bootstrap reports whether MAE improvement over the latest
-price is better, worse, or inconclusive.
+The report includes point errors, directional accuracy, Brier score,
+probability calibration, and 80%/90%/95% interval coverage, width, and proper
+interval scores. It compares the selected GBM with unchanged-price,
+historical-drift, zero-drift, momentum, and mean-reversion baselines. Direction
+scores include Wilson intervals. A deterministic paired bootstrap reports
+whether MAE improvement is better, worse, or inconclusive.
 
 ## Method
 
@@ -162,7 +163,8 @@ For discounted payoffs `X_i`, the engine reports
 Antithetic mode averages the payoffs from `Z` and `-Z` and treats that pair as
 one independent observation. Asian monitoring uses `jT/M`, `j = 1,...,M`, so it
 excludes today's spot and includes maturity. Greeks use central differences with
-common random numbers. Vega is reported per one volatility percentage point.
+common random numbers, with forward Vega differences near zero volatility.
+Vega is reported per one volatility percentage point.
 
 ## Reproduce the plots
 

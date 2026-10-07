@@ -84,6 +84,8 @@ Central differences estimate
 \text{Vega}\approx0.01\frac{V(\sigma+k)-V(\sigma-k)}{2k}.
 ```
 
+When `sigma < k`, Vega uses the second-order forward difference
+`(-3V(sigma) + 4V(sigma+k) - V(sigma+2k))/(2k)` instead.
 Defaults are `h = 0.01S` and `k = 0.01`. The `0.01` factor reports Vega per one
 volatility percentage point. Every bumped valuation reuses the same random
 streams, which removes much of the noise from the differences.
@@ -154,3 +156,9 @@ The paired MAE improvement observation is
 interval uses deterministic moving-block resampling. The block length is
 `ceil(horizon/step)`, capped by the sample count. An interval containing zero is
 reported as inconclusive. Directional accuracy uses a 95% Wilson interval.
+
+For probability `p_i` of finishing above the origin price and binary outcome
+`y_i`, the Brier score is the mean of `(p_i-y_i)^2`; lower is better.
+Calibration buckets compare mean probabilities with observed frequencies. For
+a central interval `[L,U]` with tail probability `alpha`, the interval score is
+its width plus a `2/alpha` penalty for misses below `L` or above `U`.

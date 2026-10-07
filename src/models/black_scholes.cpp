@@ -18,6 +18,10 @@ BlackScholesModel::BlackScholesModel(const MarketData& market,
     }
 
     spot_ = market.spot;
+    if (maturity == 0.0) {
+        discount_factor_ = 1.0;
+        return;
+    }
     drift_ = (market.risk_free_rate -
               0.5 * market.volatility * market.volatility) *
              maturity;

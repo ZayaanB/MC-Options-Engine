@@ -22,6 +22,10 @@ struct PriceForecast {
     std::size_t horizon_days{};
     double expected_price{};
     double median_price{};
+    double lower_80{};
+    double upper_80{};
+    double lower_90{};
+    double upper_90{};
     double lower_95{};
     double upper_95{};
     double probability_above_current{};

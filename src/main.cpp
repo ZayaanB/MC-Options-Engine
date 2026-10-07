@@ -260,8 +260,17 @@ void print_error_metrics(const std::string_view label,
                   << metrics.directionally_correct << "/"
                   << metrics.directional_predictions << ", 95% Wilson ["
                   << metrics.directional_lower_95 * 100.0 << "%, "
-                  << metrics.directional_upper_95 * 100.0 << "%])\n";
+                  << metrics.directional_upper_95 * 100.0 << "%]; assumes independent trials)\n";
     }
+}
+
+void print_interval_metrics(
+    const std::string_view label,
+    const mc::forecasting::IntervalMetrics& metrics) {
+    std::cout << label << " interval\n"
+              << "  Coverage:              " << metrics.coverage * 100.0 << "%\n"
+              << "  Mean width:            " << metrics.mean_width << '\n'
+              << "  Mean interval score:   " << metrics.mean_interval_score << '\n';
 }
 
 std::string_view conclusion_name(
@@ -343,16 +352,35 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
     } else {
         std::cout << "  Relative improvement:  unavailable (zero baseline error)\n";
     }
-    std::cout << "  95% bootstrap interval:["
+    if (std::isfinite(result.mae_improvement.lower_95)) {
+        std::cout << "  95% bootstrap interval:["
               << result.mae_improvement.lower_95 << ", "
-              << result.mae_improvement.upper_95 << "]\n"
-              << "  Block length:          "
+              << result.mae_improvement.upper_95 << "]\n";
+    } else {
+        std::cout << "  95% bootstrap interval:unavailable (fewer than 10 effective blocks)\n";
+    }
+    std::cout << "  Block length:          "
               << result.mae_improvement.block_length << '\n'
               << "  Conclusion:            "
-              << conclusion_name(result.mae_improvement.conclusion) << '\n'
-              << "95% interval coverage:   " << result.interval_coverage * 100.0
-              << "%\n"
-              << "Mean interval width:     " << result.mean_interval_width << '\n';
+              << conclusion_name(result.mae_improvement.conclusion) << "\n\n";
+    print_interval_metrics("80%", result.interval_80);
+    print_interval_metrics("90%", result.interval_90);
+    print_interval_metrics("95%", result.interval_95);
+    std::cout << "Probability above current\n"
+              << "  Brier score:           "
+              << result.probability.brier_score << '\n'
+              << "  Calibration:\n";
+    for (const auto& bucket : result.probability.calibration) {
+        if (bucket.observations == 0) {
+            continue;
+        }
+        std::cout << "    [" << bucket.lower_probability * 100.0 << "%, "
+                  << bucket.upper_probability * 100.0 << "%]: n="
+                  << bucket.observations << ", mean forecast="
+                  << bucket.mean_forecast_probability * 100.0
+                  << "%, observed above=" << bucket.observed_frequency * 100.0
+                  << "%\n";
+    }
 }
 
 }

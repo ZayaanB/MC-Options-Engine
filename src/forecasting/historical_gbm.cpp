@@ -9,6 +9,8 @@
 namespace mc::forecasting {
 namespace {
 
+constexpr double kNormal80 = 1.2815515655446004;
+constexpr double kNormal90 = 1.6448536269514722;
 constexpr double kNormal95 = 1.959963984540054;
 
 void require_positive_finite(const double value, const char* const name) {
@@ -37,7 +39,8 @@ RunningStatistics log_return_statistics(
     require_positive_finite(adjusted_closes.front(), "adjusted close");
     for (std::size_t index = 1; index < adjusted_closes.size(); ++index) {
         require_positive_finite(adjusted_closes[index], "adjusted close");
-        returns.add(std::log(adjusted_closes[index] / adjusted_closes[index - 1]));
+        returns.add(std::log(adjusted_closes[index]) -
+                    std::log(adjusted_closes[index - 1]));
     }
     return returns;
 }
@@ -118,7 +121,7 @@ HistoricalGbmModel estimate_ewma_gbm(
     double weight_sum = 0.0;
     for (std::size_t index = 1; index < adjusted_closes.size(); ++index) {
         const double value =
-            std::log(adjusted_closes[index] / adjusted_closes[index - 1]);
+            std::log(adjusted_closes[index]) - std::log(adjusted_closes[index - 1]);
         const double deviation = value - mean;
         weighted_squared_deviations =
             decay * weighted_squared_deviations + deviation * deviation;
@@ -176,26 +179,42 @@ PriceForecast forecast_price(const HistoricalGbmModel& model,
     const double expected =
         current_price * std::exp(log_mean + 0.5 * log_standard_deviation *
                                                 log_standard_deviation);
-    const double lower =
+    const double lower_80 =
+        current_price * std::exp(log_mean - kNormal80 * log_standard_deviation);
+    const double upper_80 =
+        current_price * std::exp(log_mean + kNormal80 * log_standard_deviation);
+    const double lower_90 =
+        current_price * std::exp(log_mean - kNormal90 * log_standard_deviation);
+    const double upper_90 =
+        current_price * std::exp(log_mean + kNormal90 * log_standard_deviation);
+    const double lower_95 =
         current_price * std::exp(log_mean - kNormal95 * log_standard_deviation);
-    const double upper =
+    const double upper_95 =
         current_price * std::exp(log_mean + kNormal95 * log_standard_deviation);
     const double probability_above_current =
         log_standard_deviation == 0.0
-            ? (log_mean > 0.0 ? 1.0 : (log_mean < 0.0 ? 0.0 : 0.5))
+            ? (log_mean > 0.0 ? 1.0 : 0.0)
             : standard_normal_cdf(log_mean / log_standard_deviation);
 
     require_finite_result(expected);
     require_finite_result(median);
-    require_finite_result(lower);
-    require_finite_result(upper);
+    require_finite_result(lower_80);
+    require_finite_result(upper_80);
+    require_finite_result(lower_90);
+    require_finite_result(upper_90);
+    require_finite_result(lower_95);
+    require_finite_result(upper_95);
 
     return PriceForecast{current_price,
                          horizon_days,
                          expected,
                          median,
-                         lower,
-                         upper,
+                         lower_80,
+                         upper_80,
+                         lower_90,
+                         upper_90,
+                         lower_95,
+                         upper_95,
                          probability_above_current};
 }
 

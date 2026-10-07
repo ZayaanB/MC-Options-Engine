@@ -36,10 +36,13 @@ GreeksResult GreeksEngine::calculate(const Instrument& instrument, const MarketD
     if (spot_bump >= market.spot) {
         throw std::invalid_argument{"spot bump must be smaller than spot"};
     }
-    if (volatility_bump > market.volatility) {
-        throw std::invalid_argument{
-            "central volatility bump must not exceed volatility"};
+    if (market.spot + spot_bump == market.spot ||
+        market.spot - spot_bump == market.spot ||
+        spot_bump * spot_bump == 0.0 ||
+        market.volatility + volatility_bump == market.volatility) {
+        throw std::invalid_argument{"Greek bumps must be numerically resolvable"};
     }
+    const bool forward_vega = volatility_bump > market.volatility;
 
     const MarketData spot_up{market.spot + spot_bump, market.risk_free_rate,
                              market.volatility};
@@ -48,7 +51,8 @@ GreeksResult GreeksEngine::calculate(const Instrument& instrument, const MarketD
     const MarketData volatility_up{market.spot, market.risk_free_rate,
                                    market.volatility + volatility_bump};
     const MarketData volatility_down{market.spot, market.risk_free_rate,
-                                     market.volatility - volatility_bump};
+                                     forward_vega ? market.volatility + 2.0 * volatility_bump
+                                                  : market.volatility - volatility_bump};
 
     const MonteCarloEngine pricing_engine;
     const double price = pricing_engine.price(instrument, market, option, simulation).price;
@@ -61,14 +65,20 @@ GreeksResult GreeksEngine::calculate(const Instrument& instrument, const MarketD
     const double price_volatility_down =
         pricing_engine.price(instrument, volatility_down, option, simulation).price;
 
-    return {
+    const GreeksResult result{
         .delta = (price_spot_up - price_spot_down) / (2.0 * spot_bump),
         .gamma = (price_spot_up - 2.0 * price + price_spot_down) /
                  (spot_bump * spot_bump),
-        .vega = ((price_volatility_up - price_volatility_down) /
+        .vega = ((forward_vega ? -3.0 * price + 4.0 * price_volatility_up - price_volatility_down
+                              : price_volatility_up - price_volatility_down) /
                  (2.0 * volatility_bump)) *
                 kVegaPercentagePointScale,
     };
+    if (!std::isfinite(result.delta) || !std::isfinite(result.gamma) ||
+        !std::isfinite(result.vega)) {
+        throw std::overflow_error{"Greek calculation exceeds the finite numeric range"};
+    }
+    return result;
 }
 
 }

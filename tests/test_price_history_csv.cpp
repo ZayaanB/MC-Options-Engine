@@ -7,6 +7,17 @@
 
 #include "mc/forecasting/price_history_csv.hpp"
 
+TEST_CASE("CSV rejects ambiguous headers and malformed quotes", "[forecasting][csv]") {
+    for (const auto* text : {
+             "Date,Adj Close,Adj Close\n2024-01-02,100,101\n",
+             "Date,Adj Close\n2024-01-02,\"100\"x\n",
+             "Date,Adj Close\n2024-01-02,10\"0\n"}) {
+        std::istringstream input{text};
+        REQUIRE_THROWS_AS(mc::forecasting::read_price_history_csv(input),
+                          std::invalid_argument);
+    }
+}
+
 TEST_CASE("price history reads standard market data CSV", "[forecasting][csv]") {
     std::istringstream input{
         "Date,Open,High,Low,Close,Adj Close,Volume\r\n"

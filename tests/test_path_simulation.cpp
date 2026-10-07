@@ -32,6 +32,17 @@ TEST_CASE("one GBM step agrees with terminal Black-Scholes evolution", "[path][m
             Catch::Approx(terminal_model.discount_factor()));
 }
 
+TEST_CASE("expiry ignores extreme finite volatility", "[path][model]") {
+    const mc::MarketData market{100.0, 0.05, 1e200};
+    const mc::BlackScholesModel terminal{market, 0.0};
+    const mc::GeometricBrownianMotion path{market, 0.0, 10};
+    REQUIRE(terminal.terminal_price(1.0) == 100.0);
+    REQUIRE(terminal.discount_factor() == 1.0);
+    REQUIRE(path.advance(100.0, 1.0) == 100.0);
+    REQUIRE(path.discount_factor() == 1.0);
+    REQUIRE(path.num_steps() == 10);
+}
+
 TEST_CASE("incremental GBM evolution matches the closed product of its steps",
           "[path][model]") {
     constexpr double maturity = 2.0;

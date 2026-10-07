@@ -16,6 +16,20 @@ void add_values(mc::RunningStatistics& statistics, const auto& values) {
     }
 }
 
+TEST_CASE("statistics overflow preserves previous state", "[statistics]") {
+    mc::RunningStatistics positive;
+    mc::RunningStatistics negative;
+    const double maximum = std::numeric_limits<double>::max();
+    positive.add(maximum);
+    negative.add(-maximum);
+    REQUIRE_THROWS_AS(positive.add(-maximum), std::overflow_error);
+    REQUIRE(positive.count() == 1);
+    REQUIRE(positive.mean() == maximum);
+    REQUIRE_THROWS_AS(positive.merge(negative), std::overflow_error);
+    REQUIRE(positive.count() == 1);
+    REQUIRE(positive.mean() == maximum);
+}
+
 }
 
 TEST_CASE("Welford statistics match a hand-calculated sample", "[statistics]") {

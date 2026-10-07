@@ -32,8 +32,14 @@ void RunningStatistics::merge(const RunningStatistics& other) {
     const double total_count = static_cast<double>(combined_count);
     const double delta = other.mean_ - mean_;
 
-    mean_ += delta * (other_count / total_count);
-    m2_ += other.m2_ + delta * delta * (count * other_count / total_count);
+    const double next_mean = mean_ + delta * (other_count / total_count);
+    const double next_m2 = m2_ + other.m2_ +
+                          delta * delta * (count * other_count / total_count);
+    if (!std::isfinite(next_mean) || !std::isfinite(next_m2)) {
+        throw std::overflow_error{"running statistics numeric overflow"};
+    }
+    mean_ = next_mean;
+    m2_ = next_m2;
     count_ = combined_count;
 }
 
