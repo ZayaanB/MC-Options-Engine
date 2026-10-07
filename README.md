@@ -138,7 +138,9 @@ coverage. It compares the selected GBM with unchanged-price, historical-drift,
 zero-drift, 20-day momentum, and mean-reversion baselines. The benchmark window
 is capped by the model lookback. A step shorter than the horizon creates
 overlapping targets; use a step equal to the horizon for a smaller
-non-overlapping evaluation.
+non-overlapping evaluation. Direction scores include Wilson intervals. A
+deterministic paired bootstrap reports whether MAE improvement over the latest
+price is better, worse, or inconclusive.
 
 ## Method
 

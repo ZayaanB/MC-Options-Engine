@@ -32,6 +32,13 @@ TEST_CASE("walk-forward backtest never trains beyond its forecast origin",
             Approx(0.0).margin(1e-10));
     REQUIRE(result.latest_price.mean_absolute_error > 2.0);
     REQUIRE(result.selected_model.directional_accuracy == 1.0);
+    REQUIRE(result.selected_model.directionally_correct == 3);
+    REQUIRE(result.selected_model.directional_lower_95 > 0.0);
+    REQUIRE(result.selected_model.directional_upper_95 == Approx(1.0));
+    REQUIRE(result.mae_improvement.lower_95 > 0.0);
+    REQUIRE(result.mae_improvement.conclusion ==
+            mc::forecasting::ComparisonConclusion::better);
+    REQUIRE(result.mae_improvement.block_length == 1);
 }
 
 TEST_CASE("flat histories produce exact model and baseline forecasts",
@@ -51,6 +58,13 @@ TEST_CASE("flat histories produce exact model and baseline forecasts",
     REQUIRE(result.latest_price.mean_absolute_percentage_error == 0.0);
     REQUIRE(result.selected_model.directional_predictions == 0);
     REQUIRE(std::isnan(result.selected_model.directional_accuracy));
+    REQUIRE(std::isnan(result.selected_model.directional_lower_95));
+    REQUIRE(std::isnan(result.selected_model.directional_upper_95));
+    REQUIRE(result.mae_improvement.absolute_improvement == 0.0);
+    REQUIRE(result.mae_improvement.lower_95 == 0.0);
+    REQUIRE(result.mae_improvement.upper_95 == 0.0);
+    REQUIRE(result.mae_improvement.conclusion ==
+            mc::forecasting::ComparisonConclusion::inconclusive);
     REQUIRE(result.interval_coverage == 1.0);
     REQUIRE(result.mean_interval_width == Approx(0.0).margin(1e-12));
 }
@@ -127,6 +141,10 @@ TEST_CASE("zero-drift backtests use the latest price as the point forecast",
     REQUIRE(result.selected_model.root_mean_squared_error ==
             Approx(result.latest_price.root_mean_squared_error));
     REQUIRE(result.selected_model.directional_predictions == 0);
+    REQUIRE(result.mae_improvement.lower_95 == Approx(0.0).margin(1e-12));
+    REQUIRE(result.mae_improvement.upper_95 == Approx(0.0).margin(1e-12));
+    REQUIRE(result.mae_improvement.conclusion ==
+            mc::forecasting::ComparisonConclusion::inconclusive);
 }
 
 TEST_CASE("benchmark forecasts use only trailing prices",
@@ -147,11 +165,53 @@ TEST_CASE("benchmark forecasts use only trailing prices",
     REQUIRE(first.mean_reversion_forecast > prices.front());
 }
 
+TEST_CASE("paired bootstrap is deterministic and preserves overlapping blocks",
+          "[forecasting][backtest][bootstrap]") {
+    using Catch::Approx;
+
+    const std::array prices{100.0, 101.0, 99.0, 103.0, 98.0,
+                            104.0, 97.0, 105.0, 96.0, 106.0};
+    mc::forecasting::BacktestConfig config;
+    config.lookback_days = 3;
+    config.horizon_days = 2;
+    config.step_days = 1;
+    config.bootstrap_samples = 500;
+    config.bootstrap_seed = 1234;
+
+    const auto first = mc::forecasting::walk_forward_backtest(prices, config);
+    const auto second = mc::forecasting::walk_forward_backtest(prices, config);
+
+    REQUIRE(first.mae_improvement.lower_95 ==
+            Approx(second.mae_improvement.lower_95));
+    REQUIRE(first.mae_improvement.upper_95 ==
+            Approx(second.mae_improvement.upper_95));
+    REQUIRE(first.mae_improvement.block_length == 2);
+    REQUIRE(first.mae_improvement.bootstrap_samples == 500);
+    REQUIRE(first.mae_improvement.bootstrap_seed == 1234);
+}
+
+TEST_CASE("paired bootstrap detects a consistently worse selected model",
+          "[forecasting][backtest][bootstrap]") {
+    const std::array prices{100.0, 110.0, 121.0, 133.1, 133.1};
+    mc::forecasting::BacktestConfig config;
+    config.lookback_days = 3;
+    config.horizon_days = 1;
+    config.bootstrap_samples = 100;
+
+    const auto result = mc::forecasting::walk_forward_backtest(prices, config);
+
+    REQUIRE(result.mae_improvement.upper_95 < 0.0);
+    REQUIRE(result.mae_improvement.conclusion ==
+            mc::forecasting::ComparisonConclusion::worse);
+}
+
 TEST_CASE("backtest rejects invalid configurations and histories",
           "[forecasting][backtest][validation]") {
     const std::array prices{100.0, 101.0, 102.0, 103.0};
     const std::array invalid_prices{
         100.0, std::numeric_limits<double>::quiet_NaN(), 102.0, 103.0};
+    auto invalid_bootstrap = mc::forecasting::BacktestConfig{2, 1, 1, 252.0};
+    invalid_bootstrap.bootstrap_samples = 99;
 
     REQUIRE_THROWS_AS(mc::forecasting::walk_forward_backtest(
                           prices, mc::forecasting::BacktestConfig{1, 1, 1, 252.0}),
@@ -168,5 +228,8 @@ TEST_CASE("backtest rejects invalid configurations and histories",
     REQUIRE_THROWS_AS(mc::forecasting::walk_forward_backtest(
                           invalid_prices,
                           mc::forecasting::BacktestConfig{2, 1, 1, 252.0}),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::forecasting::walk_forward_backtest(
+                          prices, invalid_bootstrap),
                       std::invalid_argument);
 }

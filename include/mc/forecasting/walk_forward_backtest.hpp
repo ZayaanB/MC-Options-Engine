@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -17,6 +18,8 @@ struct BacktestConfig {
     double ewma_decay{0.94};
     DriftEstimator drift_estimator{DriftEstimator::historical};
     double drift_shrinkage{0.5};
+    std::size_t bootstrap_samples{10'000};
+    std::uint64_t bootstrap_seed{42};
 };
 
 struct BacktestPoint {
@@ -39,7 +42,23 @@ struct ForecastErrorMetrics {
     double root_mean_squared_error{};
     double mean_absolute_percentage_error{};
     std::size_t directional_predictions{};
+    std::size_t directionally_correct{};
     double directional_accuracy{};
+    double directional_lower_95{};
+    double directional_upper_95{};
+};
+
+enum class ComparisonConclusion { better, worse, inconclusive };
+
+struct MaeImprovementEstimate {
+    double absolute_improvement{};
+    double relative_improvement{};
+    double lower_95{};
+    double upper_95{};
+    std::size_t bootstrap_samples{};
+    std::uint64_t bootstrap_seed{};
+    std::size_t block_length{};
+    ComparisonConclusion conclusion{ComparisonConclusion::inconclusive};
 };
 
 struct BacktestResult {
@@ -50,6 +69,7 @@ struct BacktestResult {
     ForecastErrorMetrics zero_drift;
     ForecastErrorMetrics momentum;
     ForecastErrorMetrics mean_reversion;
+    MaeImprovementEstimate mae_improvement;
     double interval_coverage{};
     double mean_interval_width{};
 };

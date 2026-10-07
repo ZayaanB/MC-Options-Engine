@@ -148,3 +148,9 @@ Momentum extends the trailing 20-day log-price change across the forecast
 horizon. Mean reversion moves log price toward that window's mean, with the
 fraction capped at one. Shorter lookbacks cap both benchmark windows. Neither
 baseline is used by the pricing engine.
+
+The paired MAE improvement observation is
+`|B_i-A_i|-|F_i-A_i|`; positive values favor the model. Its 95% percentile
+interval uses deterministic moving-block resampling. The block length is
+`ceil(horizon/step)`, capped by the sample count. An interval containing zero is
+reported as inconclusive. Directional accuracy uses a 95% Wilson interval.

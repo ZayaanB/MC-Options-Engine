@@ -3,13 +3,17 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <stdexcept>
+#include <vector>
 
 #include "mc/forecasting/historical_gbm.hpp"
 #include "mc/statistics/running_statistics.hpp"
 
 namespace mc::forecasting {
 namespace {
+
+constexpr double kNormal95 = 1.959963984540054;
 
 int direction(const double change) noexcept {
     if (change > 0.0) {
@@ -50,15 +54,29 @@ public:
     }
 
     ForecastErrorMetrics result() const {
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        if (directional_predictions_ == 0) {
+            return ForecastErrorMetrics{
+                absolute_errors_.mean(), std::sqrt(squared_errors_.mean()),
+                percentage_errors_.mean(), 0, 0, nan, nan, nan};
+        }
+        const double count = static_cast<double>(directional_predictions_);
         const double directional_accuracy =
-            directional_predictions_ == 0
-                ? std::numeric_limits<double>::quiet_NaN()
-                : static_cast<double>(correct_directions_) /
-                      static_cast<double>(directional_predictions_);
+            static_cast<double>(correct_directions_) / count;
+        const double squared_z = kNormal95 * kNormal95;
+        const double denominator = 1.0 + squared_z / count;
+        const double center =
+            (directional_accuracy + squared_z / (2.0 * count)) / denominator;
+        const double margin =
+            kNormal95 / denominator *
+            std::sqrt(directional_accuracy * (1.0 - directional_accuracy) /
+                          count +
+                      squared_z / (4.0 * count * count));
         return ForecastErrorMetrics{
             absolute_errors_.mean(), std::sqrt(squared_errors_.mean()),
             percentage_errors_.mean(), directional_predictions_,
-            directional_accuracy};
+            correct_directions_, directional_accuracy,
+            std::max(0.0, center - margin), std::min(1.0, center + margin)};
     }
 
 private:
@@ -96,6 +114,89 @@ double mean_reversion_forecast(const std::span<const double> training,
                     reversion_fraction * (mean_log_price - current_log_price));
 }
 
+double percentile(const std::span<const double> sorted_values,
+                  const double probability) {
+    const double position =
+        probability * static_cast<double>(sorted_values.size() - 1);
+    const auto lower_index = static_cast<std::size_t>(std::floor(position));
+    const auto upper_index = static_cast<std::size_t>(std::ceil(position));
+    const double fraction = position - static_cast<double>(lower_index);
+    return sorted_values[lower_index] +
+           fraction * (sorted_values[upper_index] - sorted_values[lower_index]);
+}
+
+MaeImprovementEstimate bootstrap_mae_improvement(
+    const std::span<const BacktestPoint> points, const BacktestConfig& config) {
+    std::vector<double> paired_improvements;
+    paired_improvements.reserve(points.size());
+    double estimate = 0.0;
+    for (const auto& point : points) {
+        const double improvement =
+            std::abs(point.latest_price_forecast - point.actual_price) -
+            std::abs(point.forecast_price - point.actual_price);
+        paired_improvements.push_back(improvement);
+        estimate += (improvement - estimate) /
+                    static_cast<double>(paired_improvements.size());
+    }
+
+    const std::size_t block_length = std::min(
+        points.size(), 1 + (config.horizon_days - 1) / config.step_days);
+    std::mt19937_64 generator{config.bootstrap_seed};
+    std::uniform_int_distribution<std::size_t> start_distribution{
+        0, paired_improvements.size() - 1};
+    std::vector<double> bootstrap_estimates;
+    bootstrap_estimates.reserve(config.bootstrap_samples);
+    for (std::size_t sample = 0; sample < config.bootstrap_samples; ++sample) {
+        double sample_mean = 0.0;
+        std::size_t drawn = 0;
+        while (drawn < paired_improvements.size()) {
+            const std::size_t start = start_distribution(generator);
+            const std::size_t take =
+                std::min(block_length, paired_improvements.size() - drawn);
+            for (std::size_t offset = 0; offset < take; ++offset) {
+                const double value = paired_improvements[
+                    (start + offset) % paired_improvements.size()];
+                sample_mean +=
+                    (value - sample_mean) / static_cast<double>(drawn + offset + 1);
+            }
+            drawn += take;
+        }
+        bootstrap_estimates.push_back(sample_mean);
+    }
+    std::sort(bootstrap_estimates.begin(), bootstrap_estimates.end());
+    const double lower = percentile(bootstrap_estimates, 0.025);
+    const double upper = percentile(bootstrap_estimates, 0.975);
+    ComparisonConclusion conclusion = ComparisonConclusion::inconclusive;
+    if (lower > 0.0) {
+        conclusion = ComparisonConclusion::better;
+    } else if (upper < 0.0) {
+        conclusion = ComparisonConclusion::worse;
+    }
+    const double baseline_mae = [&points] {
+        double mean = 0.0;
+        std::size_t count = 0;
+        for (const auto& point : points) {
+            ++count;
+            const double error =
+                std::abs(point.latest_price_forecast - point.actual_price);
+            mean += (error - mean) / static_cast<double>(count);
+        }
+        return mean;
+    }();
+    const double relative =
+        baseline_mae == 0.0
+            ? std::numeric_limits<double>::quiet_NaN()
+            : estimate / baseline_mae;
+    return MaeImprovementEstimate{estimate,
+                                  relative,
+                                  lower,
+                                  upper,
+                                  config.bootstrap_samples,
+                                  config.bootstrap_seed,
+                                  block_length,
+                                  conclusion};
+}
+
 void validate_request(const std::span<const double> adjusted_closes,
                       const BacktestConfig& config) {
     if (config.lookback_days < 2) {
@@ -106,6 +207,10 @@ void validate_request(const std::span<const double> adjusted_closes,
     }
     if (config.step_days == 0) {
         throw std::invalid_argument{"backtest step must be positive"};
+    }
+    if (config.bootstrap_samples < 100) {
+        throw std::invalid_argument{
+            "backtest bootstrap samples must be at least 100"};
     }
     if (!std::isfinite(config.trading_days_per_year) ||
         config.trading_days_per_year <= 0.0) {
@@ -213,6 +318,7 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
     result.zero_drift = zero_drift_metrics.result();
     result.momentum = momentum_metrics.result();
     result.mean_reversion = mean_reversion_metrics.result();
+    result.mae_improvement = bootstrap_mae_improvement(result.points, config);
     result.interval_coverage = static_cast<double>(covered_intervals) / count;
     result.mean_interval_width = interval_widths.mean();
     return result;
