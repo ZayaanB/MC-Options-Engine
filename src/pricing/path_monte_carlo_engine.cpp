@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <numeric>
 #include <random>
 #include <stdexcept>
 #include <thread>
@@ -51,6 +52,14 @@ RunningStatistics simulate_batch(const ArithmeticAsianCall& instrument,
     const double denominator = static_cast<double>(num_steps);
     const double discount_factor = model.discount_factor();
 
+    if (model.time_step() == 0.0) {
+        const double payoff = discount_factor * instrument.payoff(initial_price);
+        for (std::uint64_t observation = 0; observation < observations; ++observation) {
+            statistics.add(payoff);
+        }
+        return statistics;
+    }
+
     for (std::uint64_t observation = 0; observation < observations; ++observation) {
         double price = initial_price;
         double price_sum = 0.0;
@@ -66,8 +75,8 @@ RunningStatistics simulate_batch(const ArithmeticAsianCall& instrument,
                 opposite_price_sum += opposite_price;
             }
             const double paired_payoff =
-                0.5 * (instrument.payoff(price_sum / denominator) +
-                       instrument.payoff(opposite_price_sum / denominator));
+                std::midpoint(instrument.payoff(price_sum / denominator),
+                              instrument.payoff(opposite_price_sum / denominator));
             statistics.add(discount_factor * paired_payoff);
         } else {
             for (std::size_t step = 0; step < num_steps; ++step) {

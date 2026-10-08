@@ -82,6 +82,17 @@ TEST_CASE("Asian call supports zero maturity", "[asian][boundary]") {
     REQUIRE(result.sample_variance == Catch::Approx(0.0).margin(1e-24));
 }
 
+TEST_CASE("expired Asian call avoids overflowing an unnecessary path sum", "[asian][boundary]") {
+    const mc::MarketData market{1e308, 0.0, 0.0};
+    const mc::OptionParameters expired{1.0, 0.0};
+    const mc::ArithmeticAsianCall call{1.0};
+    auto simulation = config(4, 252);
+    simulation.antithetic = true;
+    const auto result = mc::PathMonteCarloEngine{}.price(call, market, expired, simulation);
+    REQUIRE(result.price == 1e308);
+    REQUIRE(result.standard_error == 0.0);
+}
+
 TEST_CASE("Asian call agrees with Black-Scholes when monitored only at maturity",
           "[asian][monte-carlo]") {
     const mc::ArithmeticAsianCall call{kOption.strike};

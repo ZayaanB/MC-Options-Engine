@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <numeric>
 #include <random>
 #include <thread>
 #include <vector>
@@ -48,7 +49,7 @@ RunningStatistics simulate_batch(const Instrument& instrument, const BlackSchole
         const double payoff = instrument.payoff(model.terminal_price(normal));
         if (antithetic) {
             const double opposite_payoff = instrument.payoff(model.terminal_price(-normal));
-            statistics.add(discount_factor * 0.5 * (payoff + opposite_payoff));
+            statistics.add(discount_factor * std::midpoint(payoff, opposite_payoff));
         } else {
             statistics.add(discount_factor * payoff);
         }

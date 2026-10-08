@@ -65,6 +65,7 @@ Backtest options:
   --csv FILE                    Historical CSV file with Date and price columns
   --price-column NAME           Price column (default: Adj Close)
   --metadata FILE               Optional daily-history provenance key=value file
+  --format text|csv             Summary or full-precision forecast rows (default: text)
   --lookback-days N             Prior returns per model fit (default: 252)
   --horizon-days N              Forecast horizon in trading days (default: 20)
   --step-days N                 Days between forecast origins (default: 1)
@@ -345,9 +346,29 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
         mc::forecasting::load_price_history_csv(options.csv_path, options.price_column);
     const auto metadata = load_metadata(options.metadata_path, options.price_column,
                                         history.dates.back());
-    const auto diagnostics = mc::forecasting::diagnose_history(history.dates);
     const auto result =
         mc::forecasting::walk_forward_backtest(history.adjusted_closes, options.config);
+    if (options.csv_output) {
+        std::cout << "origin_date,target_date,current_price,forecast_price,actual_price,"
+                     "lower_80,upper_80,lower_90,upper_90,lower_95,upper_95,"
+                     "probability_above_current,latest_price_forecast,historical_drift_forecast,"
+                     "zero_drift_forecast,momentum_forecast,mean_reversion_forecast\n"
+                  << std::setprecision(17);
+        for (const auto& point : result.points) {
+            std::cout << history.dates[point.origin_index] << ','
+                      << history.dates[point.target_index] << ',' << point.current_price << ','
+                      << point.forecast_price << ',' << point.actual_price << ','
+                      << point.lower_80 << ',' << point.upper_80 << ','
+                      << point.lower_90 << ',' << point.upper_90 << ','
+                      << point.lower_95 << ',' << point.upper_95 << ','
+                      << point.probability_above_current << ','
+                      << point.latest_price_forecast << ',' << point.historical_drift_forecast << ','
+                      << point.zero_drift_forecast << ',' << point.momentum_forecast << ','
+                      << point.mean_reversion_forecast << '\n';
+        }
+        return;
+    }
+    const auto diagnostics = mc::forecasting::diagnose_history(history.dates);
     const auto& first = result.points.front();
     const auto& last = result.points.back();
 

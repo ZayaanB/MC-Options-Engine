@@ -83,6 +83,12 @@ BacktestOptions parse_backtest_options(
             options.csv_path = take_value(arguments, index, argument);
         } else if (argument == "--price-column") {
             options.price_column = take_value(arguments, index, argument);
+        } else if (argument == "--format") {
+            const auto format = take_value(arguments, index, argument);
+            if (format != "text" && format != "csv") {
+                throw std::invalid_argument{"--format must be text or csv"};
+            }
+            options.csv_output = format == "csv";
         } else if (argument == "--metadata") {
             options.metadata_path = take_value(arguments, index, argument);
             if (options.metadata_path.empty()) {

@@ -55,6 +55,34 @@ TEST_CASE("Black-Scholes model evolves GBM and supplies discounting", "[model]")
             Approx(std::exp(-kMarket.risk_free_rate * kOption.maturity)));
 }
 
+TEST_CASE("antithetic averaging does not overflow for identical large finite payoffs", "[monte-carlo]") {
+    const mc::EuropeanCall call{1.0};
+    const mc::MarketData market{1e308, 0.0, 0.0};
+    const mc::OptionParameters expired{1.0, 0.0};
+    auto simulation = simulation_config(4);
+    simulation.antithetic = true;
+    const auto result = mc::MonteCarloEngine{}.price(call, market, expired, simulation);
+    REQUIRE(result.price == 1e308);
+    REQUIRE(result.standard_error == 0.0);
+}
+
+TEST_CASE("antithetic averaging preserves subnormal payoffs", "[monte-carlo]") {
+    const double tiny = std::numeric_limits<double>::denorm_min();
+    const mc::EuropeanCall call{tiny};
+    const mc::MarketData market{2.0 * tiny, 0.0, 0.0};
+    const mc::OptionParameters expired{tiny, 0.0};
+    auto simulation = simulation_config(4);
+    simulation.antithetic = true;
+    REQUIRE(mc::MonteCarloEngine{}.price(call, market, expired, simulation).price == tiny);
+}
+
+TEST_CASE("put pricing cannot hide terminal overflow as a zero payoff", "[monte-carlo]") {
+    const mc::EuropeanPut put{100.0};
+    const mc::MarketData market{100.0, 710.0, 0.0};
+    REQUIRE_THROWS_AS(mc::MonteCarloEngine{}.price(put, market, kOption, simulation_config(2)),
+                      std::overflow_error);
+}
+
 TEST_CASE("single-threaded Monte Carlo call agrees with Black-Scholes statistically",
           "[monte-carlo]") {
     const mc::EuropeanCall call{kOption.strike};
