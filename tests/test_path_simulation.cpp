@@ -43,6 +43,13 @@ TEST_CASE("expiry ignores extreme finite volatility", "[path][model]") {
     REQUIRE(path.num_steps() == 10);
 }
 
+TEST_CASE("models reject overflow before payoffs can mask it", "[path][model]") {
+    const mc::BlackScholesModel terminal{kMarket, 1.0};
+    const mc::GeometricBrownianMotion path{kMarket, 1.0, 1};
+    REQUIRE_THROWS_AS(terminal.terminal_price(1e308), std::overflow_error);
+    REQUIRE_THROWS_AS(path.advance(100.0, 1e308), std::overflow_error);
+}
+
 TEST_CASE("incremental GBM evolution matches the closed product of its steps",
           "[path][model]") {
     constexpr double maturity = 2.0;

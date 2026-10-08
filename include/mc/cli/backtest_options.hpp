@@ -12,6 +12,7 @@ struct BacktestOptions {
     std::string csv_path;
     std::string price_column{"Adj Close"};
     std::string metadata_path;
+    bool csv_output{};
     forecasting::BacktestConfig config{};
 };
 

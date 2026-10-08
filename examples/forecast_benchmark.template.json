@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "lookback_days": 252,
+  "validation_start": "2018-01-01",
+  "holdout_start": "2024-01-01",
+  "test_end": "2025-12-31",
+  "assets": [
+    {
+      "symbol": "AAPL",
+      "csv": "AAPL.csv",
+      "metadata": "AAPL.meta",
+      "csv_sha256": "REPLACE_WITH_CSV_SHA256",
+      "metadata_sha256": "REPLACE_WITH_METADATA_SHA256"
+    },
+    {
+      "symbol": "MSFT",
+      "csv": "MSFT.csv",
+      "metadata": "MSFT.meta",
+      "csv_sha256": "REPLACE_WITH_CSV_SHA256",
+      "metadata_sha256": "REPLACE_WITH_METADATA_SHA256"
+    }
+  ]
+}

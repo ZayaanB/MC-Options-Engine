@@ -6,6 +6,15 @@
 
 #include "mc/cli/backtest_options.hpp"
 
+TEST_CASE("backtest CLI exports machine-readable points only when requested", "[backtest-cli]") {
+    const std::array<std::string_view, 4> arguments{"--csv", "prices.csv", "--format", "csv"};
+    REQUIRE(mc::cli::parse_backtest_options(arguments).csv_output);
+    const std::array<std::string_view, 4> text{"--csv", "prices.csv", "--format", "text"};
+    REQUIRE_FALSE(mc::cli::parse_backtest_options(text).csv_output);
+    const std::array<std::string_view, 4> invalid{"--csv", "prices.csv", "--format", "json"};
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(invalid), std::invalid_argument);
+}
+
 TEST_CASE("backtest CLI accepts provenance metadata", "[backtest-cli]") {
     const std::array<std::string_view, 4> arguments{
         "--csv", "prices.csv", "--metadata", "prices.meta"};

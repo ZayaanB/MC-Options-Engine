@@ -132,6 +132,10 @@ values printed as percentages differ from decimal inputs to the pricing CLI.
 
 ## 4. Test historical accuracy
 
+For repeatable multi-stock testing at 1/5/20-session horizons, use the
+[frozen benchmark runner](forecast-benchmark.md). It separates validation from
+explicit holdout scoring and records input hashes.
+
 Use a rolling year of returns to predict 20 sessions ahead, advancing by 20
 sessions so target return periods do not overlap:
 

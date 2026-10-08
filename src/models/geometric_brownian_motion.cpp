@@ -31,7 +31,6 @@ GeometricBrownianMotion::GeometricBrownianMotion(const MarketData& market,
     step_drift_ =
         (market.risk_free_rate - 0.5 * market.volatility * market.volatility) * time_step_;
     step_diffusion_ = market.volatility * std::sqrt(time_step_);
-    num_steps_ = num_steps;
     discount_factor_ = std::exp(-market.risk_free_rate * maturity);
     if (!std::isfinite(time_step_) || !std::isfinite(step_drift_) ||
         !std::isfinite(step_diffusion_) || !std::isfinite(discount_factor_)) {
