@@ -76,6 +76,8 @@ Backtest options:
   --drift-shrinkage VALUE       Fraction of drift removed in [0,1] (default: 0.5)
   --bootstrap-samples N         Paired bootstrap samples (default: 10000)
   --bootstrap-seed N            Unsigned bootstrap seed (default: 42)
+  --bootstrap-block-size N      Block length in forecast observations (default: overlap heuristic)
+  --bootstrap-sensitivity       Compare primary, doubled and quadrupled block lengths
 
 General:
   --help                        Show this help
@@ -307,7 +309,13 @@ void print_error_metrics(const std::string_view label,
               << "  RMSE:                  " << metrics.root_mean_squared_error << '\n'
               << "  MAPE:                  "
               << metrics.mean_absolute_percentage_error * 100.0 << "%\n"
-              << "  Directional accuracy:  ";
+              << "  MASE:                  ";
+    if (std::isfinite(metrics.mean_absolute_scaled_error)) {
+        std::cout << metrics.mean_absolute_scaled_error << '\n';
+    } else {
+        std::cout << "unavailable (zero training scale)\n";
+    }
+    std::cout << "  Directional accuracy:  ";
     if (metrics.directional_predictions == 0) {
         std::cout << "unavailable (no directional forecasts)\n";
     } else {
@@ -352,7 +360,8 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
         std::cout << "origin_date,target_date,current_price,forecast_price,actual_price,"
                      "lower_80,upper_80,lower_90,upper_90,lower_95,upper_95,"
                      "probability_above_current,latest_price_forecast,historical_drift_forecast,"
-                     "zero_drift_forecast,momentum_forecast,mean_reversion_forecast\n"
+                     "zero_drift_forecast,momentum_forecast,mean_reversion_forecast,"
+                     "naive_error_scale,historical_up_probability\n"
                   << std::setprecision(17);
         for (const auto& point : result.points) {
             std::cout << history.dates[point.origin_index] << ','
@@ -364,7 +373,11 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
                       << point.probability_above_current << ','
                       << point.latest_price_forecast << ',' << point.historical_drift_forecast << ','
                       << point.zero_drift_forecast << ',' << point.momentum_forecast << ','
-                      << point.mean_reversion_forecast << '\n';
+                      << point.mean_reversion_forecast << ',' << point.naive_error_scale << ',';
+            if (std::isfinite(point.historical_up_probability)) {
+                std::cout << point.historical_up_probability;
+            }
+            std::cout << '\n';
         }
         return;
     }
@@ -442,13 +455,34 @@ void run_backtest(const mc::cli::BacktestOptions& options) {
               << result.mae_improvement.block_length << '\n'
               << "  Conclusion:            "
               << conclusion_name(result.mae_improvement.conclusion) << "\n\n";
+    if (!result.bootstrap_sensitivity.empty()) {
+        std::cout << "Bootstrap block sensitivity (heuristic, not independence proof)\n";
+        for (const auto& estimate : result.bootstrap_sensitivity) {
+            std::cout << "  Block " << estimate.block_length << ": ";
+            if (std::isfinite(estimate.lower_95)) {
+                std::cout << '[' << estimate.lower_95 << ", " << estimate.upper_95 << "] ";
+            } else {
+                std::cout << "unavailable; ";
+            }
+            std::cout << conclusion_name(estimate.conclusion) << '\n';
+        }
+    }
     print_interval_metrics("80%", result.interval_80);
     print_interval_metrics("90%", result.interval_90);
     print_interval_metrics("95%", result.interval_95);
     std::cout << "Probability above current\n"
               << "  Brier score:           "
               << result.probability.brier_score << '\n'
-              << "  Calibration:\n";
+              << "  Constant-50% Brier:     " << result.probability.half_brier_score << '\n'
+              << "  Always-up Brier:        " << result.probability.always_up_brier_score << '\n'
+              << "  Always-up accuracy:     " << result.probability.always_up_accuracy * 100.0 << "%\n"
+              << "  Trailing-up Brier:      ";
+    if (std::isfinite(result.probability.historical_up_brier_score)) {
+        std::cout << result.probability.historical_up_brier_score << '\n';
+    } else {
+        std::cout << "unavailable (horizon exceeds training lookback)\n";
+    }
+    std::cout << "  Calibration:\n";
     for (const auto& bucket : result.probability.calibration) {
         if (bucket.observations == 0) {
             continue;

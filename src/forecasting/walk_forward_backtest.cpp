@@ -28,7 +28,8 @@ int direction(const double change) noexcept {
 
 class MetricsAccumulator {
 public:
-    void add(const double forecast, const double current, const double actual) {
+    void add(const double forecast, const double current, const double actual,
+             const double naive_error_scale) {
         if (!std::isfinite(forecast)) {
             throw std::overflow_error{
                 "backtest forecast exceeds the finite numeric range"};
@@ -44,6 +45,11 @@ public:
         absolute_errors_.add(std::abs(error));
         squared_errors_.add(squared_error);
         percentage_errors_.add(percentage_error);
+        if (naive_error_scale > 0.0) {
+            scaled_errors_.add(std::abs(error) / naive_error_scale);
+        } else {
+            all_scales_valid_ = false;
+        }
 
         const int predicted_direction = direction(forecast - current);
         if (predicted_direction != 0) {
@@ -59,7 +65,8 @@ public:
         if (directional_predictions_ == 0) {
             return ForecastErrorMetrics{
                 absolute_errors_.mean(), std::sqrt(squared_errors_.mean()),
-                percentage_errors_.mean(), 0, 0, nan, nan, nan};
+                percentage_errors_.mean(), 0, 0, nan, nan, nan,
+                all_scales_valid_ ? scaled_errors_.mean() : nan};
         }
         const double count = static_cast<double>(directional_predictions_);
         const double directional_accuracy =
@@ -77,13 +84,16 @@ public:
             absolute_errors_.mean(), std::sqrt(squared_errors_.mean()),
             percentage_errors_.mean(), directional_predictions_,
             correct_directions_, directional_accuracy,
-            std::max(0.0, center - margin), std::min(1.0, center + margin)};
+            std::max(0.0, center - margin), std::min(1.0, center + margin),
+            all_scales_valid_ ? scaled_errors_.mean() : nan};
     }
 
 private:
     RunningStatistics absolute_errors_;
     RunningStatistics squared_errors_;
     RunningStatistics percentage_errors_;
+    RunningStatistics scaled_errors_;
+    bool all_scales_valid_{true};
     std::size_t directional_predictions_{};
     std::size_t correct_directions_{};
 };
@@ -128,7 +138,7 @@ private:
 class ProbabilityAccumulator {
 public:
     void add(const double probability, const double current,
-             const double actual) {
+             const double actual, const double historical_probability) {
         if (!std::isfinite(probability) || probability < 0.0 ||
             probability > 1.0) {
             throw std::overflow_error{"forecast probability is outside [0,1]"};
@@ -136,6 +146,12 @@ public:
         const double outcome = actual > current ? 1.0 : 0.0;
         const double error = probability - outcome;
         brier_scores_.add(error * error);
+        outcomes_.add(outcome);
+        always_up_scores_.add((1.0 - outcome) * (1.0 - outcome));
+        if (std::isfinite(historical_probability)) {
+            const double baseline_error = historical_probability - outcome;
+            historical_scores_.add(baseline_error * baseline_error);
+        }
         const std::size_t bucket = std::min<std::size_t>(
             static_cast<std::size_t>(probability * 5.0), 4);
         bucket_probabilities_[bucket].add(probability);
@@ -145,6 +161,11 @@ public:
     ProbabilityMetrics result() const {
         ProbabilityMetrics metrics;
         metrics.brier_score = brier_scores_.mean();
+        metrics.half_brier_score = 0.25;
+        metrics.always_up_brier_score = always_up_scores_.mean();
+        metrics.historical_up_brier_score = historical_scores_.count() == outcomes_.count()
+            ? historical_scores_.mean() : std::numeric_limits<double>::quiet_NaN();
+        metrics.always_up_accuracy = outcomes_.mean();
         metrics.calibration.reserve(5);
         for (std::size_t index = 0; index < 5; ++index) {
             const std::size_t observations = static_cast<std::size_t>(
@@ -162,6 +183,9 @@ public:
 
 private:
     RunningStatistics brier_scores_;
+    RunningStatistics outcomes_;
+    RunningStatistics always_up_scores_;
+    RunningStatistics historical_scores_;
     std::array<RunningStatistics, 5> bucket_probabilities_;
     std::array<RunningStatistics, 5> bucket_outcomes_;
 };
@@ -218,8 +242,12 @@ MaeImprovementEstimate bootstrap_mae_improvement(
                     static_cast<double>(paired_improvements.size());
     }
 
-    const std::size_t block_length = std::min(
-        points.size(), 1 + (config.horizon_days - 1) / config.step_days);
+    const std::size_t block_length = config.bootstrap_block_size == 0
+        ? std::min(points.size(), 1 + (config.horizon_days - 1) / config.step_days)
+        : config.bootstrap_block_size;
+    if (block_length > points.size()) {
+        throw std::invalid_argument{"bootstrap block size must not exceed forecast count"};
+    }
     if (points.size() / block_length < 10) {
         double baseline_mae = 0.0;
         for (const auto& point : points) {
@@ -372,19 +400,29 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
             training, benchmark_window, config.horizon_days);
         const double mean_reversion = mean_reversion_forecast(
             training, benchmark_window, config.horizon_days);
+        double scale = 0.0;
+        for (std::size_t index = 1; index < training.size(); ++index) {
+            scale += (std::abs(training[index] - training[index - 1]) - scale) /
+                     static_cast<double>(index);
+        }
+        RunningStatistics historical_outcomes;
+        for (std::size_t index = config.horizon_days; index < training.size(); ++index) {
+            historical_outcomes.add(training[index] > training[index - config.horizon_days] ? 1.0 : 0.0);
+        }
+        const double historical_probability = historical_outcomes.mean();
 
-        selected_metrics.add(forecast.expected_price, current, actual);
-        latest_price_metrics.add(current, current, actual);
+        selected_metrics.add(forecast.expected_price, current, actual, scale);
+        latest_price_metrics.add(current, current, actual, scale);
         historical_drift_metrics.add(historical_forecast.expected_price,
-                                     current, actual);
-        zero_drift_metrics.add(current, current, actual);
-        momentum_metrics.add(momentum, current, actual);
-        mean_reversion_metrics.add(mean_reversion, current, actual);
+                                     current, actual, scale);
+        zero_drift_metrics.add(current, current, actual, scale);
+        momentum_metrics.add(momentum, current, actual, scale);
+        mean_reversion_metrics.add(mean_reversion, current, actual, scale);
         interval_80.add(forecast.lower_80, forecast.upper_80, actual);
         interval_90.add(forecast.lower_90, forecast.upper_90, actual);
         interval_95.add(forecast.lower_95, forecast.upper_95, actual);
         probability_metrics.add(forecast.probability_above_current, current,
-                                actual);
+                                actual, historical_probability);
         result.points.push_back(BacktestPoint{origin,
                                               target,
                                               adjusted_closes[origin],
@@ -401,7 +439,9 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
                                               historical_forecast.expected_price,
                                               current,
                                               momentum,
-                                              mean_reversion});
+                                              mean_reversion,
+                                              scale,
+                                              historical_probability});
 
         if (config.step_days > last_origin - origin) {
             break;
@@ -416,6 +456,20 @@ BacktestResult walk_forward_backtest(const std::span<const double> adjusted_clos
     result.momentum = momentum_metrics.result();
     result.mean_reversion = mean_reversion_metrics.result();
     result.mae_improvement = bootstrap_mae_improvement(result.points, config);
+    if (config.bootstrap_sensitivity) {
+        auto sensitivity_config = config;
+        std::size_t block = result.mae_improvement.block_length;
+        for (std::size_t index = 0; index < 3; ++index) {
+            sensitivity_config.bootstrap_block_size = block;
+            result.bootstrap_sensitivity.push_back(
+                index == 0 ? result.mae_improvement
+                           : bootstrap_mae_improvement(result.points, sensitivity_config));
+            if (block == result.points.size()) {
+                break;
+            }
+            block = block > result.points.size() / 2 ? result.points.size() : block * 2;
+        }
+    }
     result.interval_80 = interval_80.result();
     result.interval_90 = interval_90.result();
     result.interval_95 = interval_95.result();

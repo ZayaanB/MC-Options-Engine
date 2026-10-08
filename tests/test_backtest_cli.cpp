@@ -6,6 +6,17 @@
 
 #include "mc/cli/backtest_options.hpp"
 
+TEST_CASE("bootstrap CLI exposes explicit block length and sensitivity", "[backtest-cli]") {
+    const std::array<std::string_view, 5> arguments{
+        "--csv", "prices.csv", "--bootstrap-block-size", "4", "--bootstrap-sensitivity"};
+    const auto options = mc::cli::parse_backtest_options(arguments);
+    REQUIRE(options.config.bootstrap_block_size == 4);
+    REQUIRE(options.config.bootstrap_sensitivity);
+    const std::array<std::string_view, 4> invalid{
+        "--csv", "prices.csv", "--bootstrap-block-size", "0"};
+    REQUIRE_THROWS_AS(mc::cli::parse_backtest_options(invalid), std::invalid_argument);
+}
+
 TEST_CASE("backtest CLI exports machine-readable points only when requested", "[backtest-cli]") {
     const std::array<std::string_view, 4> arguments{"--csv", "prices.csv", "--format", "csv"};
     REQUIRE(mc::cli::parse_backtest_options(arguments).csv_output);

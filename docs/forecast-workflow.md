@@ -158,12 +158,31 @@ Interpret the report as follows:
 | Measure | What to look for |
 | --- | --- |
 | MAE, RMSE, MAPE | Smaller errors than the latest-price baseline |
+| MASE | Scale-free errors; compare model and baseline at the same horizon |
 | Paired MAE improvement | Positive favors the selected model; an interval spanning zero is inconclusive |
 | Directional accuracy | Check the forecast count and Wilson interval, not just the percentage |
 | Brier score | Lower is better; a constant 50% forecast always scores 0.25 |
 | Calibration | Mean forecast probabilities should resemble observed upward frequencies |
 | Interval coverage | Compare with the nominal 80%, 90%, or 95% rate |
 | Width and interval score | Lower is better, assessed at the same horizon and price scale |
+
+The report also shows always-up direction accuracy and Brier scores for
+always-up and training-only, same-horizon historical-rise frequencies. Flat
+training windows make MASE unavailable; a horizon longer than the lookback
+makes the historical-rise probability baseline unavailable.
+
+Test uncertainty sensitivity without changing the forecasts:
+
+```bash
+./build/mcprice backtest --csv Notes-dont-commit/AAPL.csv \
+  --lookback-days 252 --horizon-days 20 --step-days 20 \
+  --bootstrap-block-size 2 --bootstrap-sensitivity
+```
+
+This compares blocks of 2, 4, and 8 forecast observations, capped at the sample
+count. The default primary block is `ceil(horizon/step)`. Neither this heuristic
+nor the ten-block guard establishes independence; report inconclusive results
+when conclusions depend on block choice.
 
 Many observations inside a very wide range do not establish good prediction.
 Non-overlapping targets still share training data and may remain dependent.
@@ -182,7 +201,7 @@ c++ --version
 ```
 
 Keep the exact command, data checksum, source revision, and compiler version.
-Reports are plain text; JSON/CSV report export is not currently available.
+Use `--format csv` for individual backtest rows or the benchmark runner for JSON.
 The bootstrap seed controls resampling uncertainty, not the analytical GBM
 forecast. A fixed full configuration reproduces on the same toolchain.
 

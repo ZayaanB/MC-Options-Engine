@@ -4,6 +4,11 @@
   "validation_start": "2018-01-01",
   "holdout_start": "2024-01-01",
   "test_end": "2025-12-31",
+  "bootstrap": {
+    "samples": 2000,
+    "seed": 42,
+    "block_sizes": [1, 2, 4]
+  },
   "assets": [
     {
       "symbol": "AAPL",
