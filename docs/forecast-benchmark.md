@@ -16,7 +16,7 @@ steps, so target return windows do not overlap. It does not tune models.
 4. Replace both checksum placeholders per stock with the output of
    `sha256sum FILE.csv FILE.meta` (macOS: `shasum -a 256`).
 
-The manifest accepts exactly the template's fields. Changed input bytes,
+The manifest accepts the template's fields (`bootstrap` is optional). Changed input bytes,
 duplicate tickers, invalid metadata, or empty evaluation groups fail the run.
 Provenance is declared by you; hashes establish file identity, not data quality.
 
@@ -66,10 +66,31 @@ excludes unchanged point forecasts and counts an unchanged actual as neither
 up nor down. An unavailable statistic is JSON `null`, never zero.
 
 Coverage alone is not enough: compare interval widths too. These are descriptive
-results, not a significance test or proof of a predictive edge. Nonoverlapping
+results, not proof of a predictive edge. Nonoverlapping
 targets can still have dependent errors. The runner uses declared daily cadence,
 not an exchange calendar, and cannot remove survivorship or corporate-action
 bias from an unsuitable export.
+
+MASE averages each absolute error divided by the mean one-session absolute
+price change in that origin's training window. It is scale-free, but its unit
+is a past one-session error even for a 20-session forecast: compare model and
+baseline MASE at the same horizon. If any origin has a zero scale, the group's
+MASE is unavailable rather than silently excluding that origin.
+
+The always-up directional baseline includes every target; unchanged prices are
+not rises. Brier baselines use constant 50%, constant 100%, and the frequency of
+strict rises over same-horizon windows inside each training set. The trailing
+baseline is unavailable if the horizon exceeds the lookback. Compare direction
+accuracy with care: a model that abstains can have a smaller denominator.
+
+Paired circular-block bootstrap intervals compare latest-price and selected
+absolute errors within each scored group. Configure `bootstrap.samples`,
+`bootstrap.seed`, and `bootstrap.block_sizes` before evaluation. Defaults are
+2000, 42, and `[1,2,4]`; block lengths count forecast observations. Fewer than
+ten complete blocks gives unavailable bounds and an inconclusive label. This
+guard is not proof of independence. Check whether conclusions change across
+block sizes; do not select the most favorable interval. Python and C++ use
+different random generators, so their bootstrap bounds need not match exactly.
 
 For your own analysis, export the engine's individual predictions directly:
 

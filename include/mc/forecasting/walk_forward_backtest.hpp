@@ -20,6 +20,8 @@ struct BacktestConfig {
     double drift_shrinkage{0.5};
     std::size_t bootstrap_samples{10'000};
     std::uint64_t bootstrap_seed{42};
+    std::size_t bootstrap_block_size{};
+    bool bootstrap_sensitivity{};
 };
 
 struct BacktestPoint {
@@ -40,6 +42,8 @@ struct BacktestPoint {
     double zero_drift_forecast{};
     double momentum_forecast{};
     double mean_reversion_forecast{};
+    double naive_error_scale{};
+    double historical_up_probability{};
 };
 
 struct ForecastErrorMetrics {
@@ -51,6 +55,7 @@ struct ForecastErrorMetrics {
     double directional_accuracy{};
     double directional_lower_95{};
     double directional_upper_95{};
+    double mean_absolute_scaled_error{};
 };
 
 enum class ComparisonConclusion { better, worse, inconclusive };
@@ -83,6 +88,10 @@ struct CalibrationBucket {
 struct ProbabilityMetrics {
     double brier_score{};
     std::vector<CalibrationBucket> calibration;
+    double half_brier_score{};
+    double always_up_brier_score{};
+    double historical_up_brier_score{};
+    double always_up_accuracy{};
 };
 
 struct BacktestResult {
@@ -98,6 +107,7 @@ struct BacktestResult {
     IntervalMetrics interval_90;
     IntervalMetrics interval_95;
     ProbabilityMetrics probability;
+    std::vector<MaeImprovementEstimate> bootstrap_sensitivity;
 };
 
 [[nodiscard]] BacktestResult walk_forward_backtest(

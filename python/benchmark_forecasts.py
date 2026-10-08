@@ -5,6 +5,7 @@ import io
 import json
 import math
 import platform
+import random
 import shutil
 import statistics
 import subprocess
@@ -42,7 +43,7 @@ def read_manifest(path):
     config = json.loads(raw, object_pairs_hook=unique_object)
     required = {"schema_version", "lookback_days", "validation_start", "holdout_start",
                 "test_end", "assets"}
-    if not isinstance(config, dict) or set(config) != required:
+    if not isinstance(config, dict) or not required <= set(config) or set(config) - required - {"bootstrap"}:
         raise ValueError("manifest must contain exactly the documented fields")
     if type(config["schema_version"]) is not int or config["schema_version"] != 1:
         raise ValueError("unsupported manifest schema_version")
@@ -52,6 +53,17 @@ def read_manifest(path):
                            ("validation_start", "holdout_start", "test_end"))
     if not start < holdout <= end:
         raise ValueError("require validation_start < holdout_start <= test_end")
+    bootstrap = config.get("bootstrap", {"samples": 2000, "seed": 42, "block_sizes": [1, 2, 4]})
+    if not isinstance(bootstrap, dict) or set(bootstrap) != {"samples", "seed", "block_sizes"}:
+        raise ValueError("bootstrap requires samples, seed and block_sizes")
+    if type(bootstrap["samples"]) is not int or bootstrap["samples"] < 100:
+        raise ValueError("bootstrap samples must be at least 100")
+    if type(bootstrap["seed"]) is not int or bootstrap["seed"] < 0:
+        raise ValueError("bootstrap seed must be a nonnegative integer")
+    blocks = bootstrap["block_sizes"]
+    if (not isinstance(blocks, list) or not blocks or
+            any(type(block) is not int or block <= 0 for block in blocks) or len(set(blocks)) != len(blocks)):
+        raise ValueError("bootstrap block_sizes must be distinct positive integers")
     assets = config["assets"]
     if not isinstance(assets, list) or len(assets) < 2:
         raise ValueError("freeze at least two assets before benchmarking")
@@ -135,9 +147,21 @@ def summarize(points):
             "mape": statistics.mean(abs(error) / point["actual_price"]
                                     for error, point in zip(errors, points)),
             "directional_predictions": len(directional), "directional_accuracy": accuracy}
+        scales = [point.get("naive_error_scale") for point in points]
+        result[name]["mase"] = (statistics.mean(abs(error) / scale for error, scale in zip(errors, scales))
+                                if all(scale is not None and scale > 0 for scale in scales) else None)
     result["brier_score"] = statistics.mean(
         (point["probability_above_current"] -
          (point["actual_price"] > point["current_price"])) ** 2 for point in points)
+    result["always_up_accuracy"] = statistics.mean(
+        point["actual_price"] > point["current_price"] for point in points)
+    result["half_brier_score"] = 0.25
+    result["always_up_brier_score"] = 1.0 - result["always_up_accuracy"]
+    probabilities = [point.get("historical_up_probability") for point in points]
+    result["historical_up_brier_score"] = (statistics.mean(
+        (probability - (point["actual_price"] > point["current_price"])) ** 2
+        for probability, point in zip(probabilities, points))
+        if all(probability is not None for probability in probabilities) else None)
     result["coverage_95"] = statistics.mean(
         point["lower_95"] <= point["actual_price"] <= point["upper_95"] for point in points)
     result["mean_width_95"] = statistics.mean(point["upper_95"] - point["lower_95"] for point in points)
@@ -150,6 +174,41 @@ def summarize(points):
     if any(not math.isfinite(value) for value in numbers):
         raise ValueError("benchmark metrics exceed finite numeric range")
     return result
+
+
+def bootstrap_sensitivity(points, settings):
+    improvements = [abs(point["latest_price_forecast"] - point["actual_price"]) -
+                    abs(point["forecast_price"] - point["actual_price"]) for point in points]
+    count = len(improvements)
+    results = []
+    for block in settings["block_sizes"]:
+        result = {"block_size": block, "effective_blocks": count // block,
+                  "lower_95": None, "upper_95": None, "conclusion": "inconclusive"}
+        if count // block >= 10:
+            generator = random.Random(settings["seed"])
+            estimates = []
+            for _ in range(settings["samples"]):
+                sample = []
+                while len(sample) < count:
+                    start = generator.randrange(count)
+                    take = min(block, count - len(sample))
+                    sample.extend(improvements[(start + offset) % count] for offset in range(take))
+                estimates.append(math.fsum(sample) / count)
+            estimates.sort()
+
+            def quantile(probability):
+                position = probability * (len(estimates) - 1)
+                lower = math.floor(position)
+                upper = math.ceil(position)
+                return estimates[lower] + (position - lower) * (estimates[upper] - estimates[lower])
+
+            result["lower_95"], result["upper_95"] = quantile(0.025), quantile(0.975)
+            if result["lower_95"] > 0:
+                result["conclusion"] = "better"
+            elif result["upper_95"] < 0:
+                result["conclusion"] = "worse"
+        results.append(result)
+    return results
 
 
 def run_benchmark(manifest, engine, phase):
@@ -192,24 +251,29 @@ def run_benchmark(manifest, engine, phase):
                         continue
                     if phase == "validation" and row["target_date"] >= config["holdout_start"]:
                         continue
-                    point = {key: value if key.endswith("_date") else float(value)
+                    point = {key: value if key.endswith("_date") else (float(value) if value else None)
                              for key, value in row.items()}
                     if any(not math.isfinite(value) for value in point.values() if isinstance(value, float)):
                         raise ValueError("engine returned nonfinite forecast points")
                     points.append(point)
                 metrics = summarize(points)
+                bootstrap_settings = config.get("bootstrap", {"samples": 2000, "seed": 42,
+                                                               "block_sizes": [1, 2, 4]})
+                sensitivity = bootstrap_sensitivity(points, bootstrap_settings)
                 results.append({"symbol": asset["symbol"], "horizon_days": horizon,
                                 "step_days": horizon, "forecasts": len(points),
                                 "first_origin": points[0]["origin_date"],
                                 "last_target": points[-1]["target_date"],
-                                "metrics": metrics, "points": points})
+                                "metrics": metrics, "points": points,
+                                "bootstrap_sensitivity": sensitivity})
     return {"schema_version": 1, "phase": phase, "manifest_sha256": manifest_hash,
             "engine_sha256": sha256(engine_raw), "python_version": platform.python_version(),
             "platform": platform.platform(), "config": config,
             "model": {"drift": "historical", "volatility": "sample", "trading_days": 252},
             "provenance": [metadata for _, (_, _, metadata, _) in assets],
+            "bootstrap": config.get("bootstrap", {"samples": 2000, "seed": 42, "block_sizes": [1, 2, 4]}),
             "limitations": ["No exchange-calendar validation; metadata is declared, not verified.",
-                            "Descriptive accuracy only; no significance or predictive-edge claim.",
+                            "Bootstrap intervals depend on chosen blocks; no predictive-edge claim.",
                             "Nonoverlapping targets can still have dependent errors and shared training data.",
                             "Re-running or tuning on holdout results invalidates its untouched status."],
             "results": results}

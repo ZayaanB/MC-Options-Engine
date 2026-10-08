@@ -81,6 +81,11 @@ BacktestOptions parse_backtest_options(
 
         if (argument == "--csv") {
             options.csv_path = take_value(arguments, index, argument);
+        } else if (argument == "--bootstrap-sensitivity") {
+            options.config.bootstrap_sensitivity = true;
+        } else if (argument == "--bootstrap-block-size") {
+            options.config.bootstrap_block_size = parse_positive_size(
+                take_value(arguments, index, argument), argument);
         } else if (argument == "--price-column") {
             options.price_column = take_value(arguments, index, argument);
         } else if (argument == "--format") {

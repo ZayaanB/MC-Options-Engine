@@ -32,6 +32,7 @@ class BenchmarkTests(unittest.TestCase):
             day += timedelta(days=1)
         self.prices = [100 * math.exp(0.0003 * index + 0.01 * math.sin(index)) for index in range(180)]
         self.config = {"schema_version": 1, "lookback_days": 10,
+                       "bootstrap": {"samples": 100, "seed": 42, "block_sizes": [1, 2, 4]},
                        "validation_start": self.dates[20], "holdout_start": self.dates[100],
                        "test_end": self.dates[-1], "assets": []}
         for symbol, prices in (("SYNTH_A", self.prices), ("SYNTH_B", [100.0] * 180)):
@@ -86,8 +87,44 @@ class BenchmarkTests(unittest.TestCase):
         self.assertIsNone(result["latest_price"]["directional_accuracy"])
         self.assertIsNone(result["relative_mae_improvement"])
         self.assertAlmostEqual(result["brier_score"], 0.16)
+        self.assertEqual(result["always_up_accuracy"], 0)
+        self.assertEqual(result["always_up_brier_score"], 1)
+        self.assertEqual(result["half_brier_score"], 0.25)
+        self.assertIsNone(result["selected"]["mase"])
         with self.assertRaises(ValueError):
             benchmark.summarize([])
+
+    def test_scaled_errors_and_probability_baselines_have_known_values(self):
+        points = [{"current_price": 100, "forecast_price": 102, "actual_price": 104,
+                   "latest_price_forecast": 100, "probability_above_current": 0.75,
+                   "lower_95": 95, "upper_95": 105, "naive_error_scale": 2,
+                   "historical_up_probability": 0.5}]
+        result = benchmark.summarize(points)
+        self.assertEqual(result["selected"]["mase"], 1)
+        self.assertEqual(result["latest_price"]["mase"], 2)
+        self.assertEqual(result["historical_up_brier_score"], 0.25)
+        self.assertEqual(result["always_up_accuracy"], 1)
+        self.assertEqual(result["always_up_brier_score"], 0)
+
+    def test_bootstrap_is_deterministic_and_does_not_infer_from_tiny_samples(self):
+        points = [{"latest_price_forecast": 100, "forecast_price": 101, "actual_price": 102}] * 40
+        settings = {"samples": 100, "seed": 42, "block_sizes": [1, 2, 8]}
+        result = benchmark.bootstrap_sensitivity(points, settings)
+        self.assertEqual(result, benchmark.bootstrap_sensitivity(points, settings))
+        self.assertEqual(result[0]["lower_95"], 1)
+        self.assertEqual(result[0]["conclusion"], "better")
+        self.assertIsNone(result[-1]["lower_95"])
+        self.assertEqual(result[-1]["conclusion"], "inconclusive")
+
+    def test_manifest_rejects_invalid_bootstrap_settings(self):
+        for settings in ({"samples": 99, "seed": 42, "block_sizes": [1]},
+                         {"samples": 100, "seed": -1, "block_sizes": [1]},
+                         {"samples": 100, "seed": 42, "block_sizes": [0]},
+                         {"samples": 100, "seed": 42, "block_sizes": [1, 1]}):
+            self.config["bootstrap"] = settings
+            self.save()
+            with self.assertRaises(ValueError):
+                benchmark.read_manifest(self.manifest)
 
     def test_validation_excludes_holdout_from_engine_inputs_and_matches_reference(self):
         real_run = subprocess.run
@@ -114,6 +151,15 @@ class BenchmarkTests(unittest.TestCase):
             for point in result["points"]:
                 origin = self.dates.index(point["origin_date"])
                 training = self.prices[origin - 10:origin + 1]
+                self.assertAlmostEqual(point["naive_error_scale"], statistics.mean(
+                    abs(b - a) for a, b in zip(training, training[1:])), places=12)
+                expected_probability = (statistics.mean(
+                    training[index] > training[index - horizon]
+                    for index in range(horizon, len(training))) if horizon <= 10 else None)
+                if expected_probability is None:
+                    self.assertIsNone(point["historical_up_probability"])
+                else:
+                    self.assertAlmostEqual(point["historical_up_probability"], expected_probability, places=14)
                 returns = [math.log(b) - math.log(a) for a, b in zip(training, training[1:])]
                 forecast = training[-1] * math.exp(horizon * (
                     statistics.mean(returns) + statistics.variance(returns) / 2))

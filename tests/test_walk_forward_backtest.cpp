@@ -9,6 +9,70 @@
 #include "mc/forecasting/walk_forward_backtest.hpp"
 #include "mc/forecasting/price_history_csv.hpp"
 
+TEST_CASE("scale-free errors and probability baselines use trailing training data", "[forecasting][backtest]") {
+    const std::array prices{100.0, 110.0, 100.0, 120.0, 100.0, 130.0, 100.0};
+    const auto result = mc::forecasting::walk_forward_backtest(
+        prices, mc::forecasting::BacktestConfig{3, 2, 1, 252.0});
+    REQUIRE(result.points.size() == 2);
+    REQUIRE(result.points[0].naive_error_scale == Catch::Approx(40.0 / 3.0));
+    REQUIRE(result.points[1].naive_error_scale == Catch::Approx(50.0 / 3.0));
+    REQUIRE(result.points[0].historical_up_probability == 0.5);
+    REQUIRE(result.points[1].historical_up_probability == 0.5);
+    REQUIRE(result.probability.historical_up_brier_score == 0.25);
+    REQUIRE(result.probability.half_brier_score == 0.25);
+    REQUIRE(result.probability.always_up_brier_score == 0.5);
+    REQUIRE(result.probability.always_up_accuracy == 0.5);
+    double scaled_error = 0.0;
+    for (const auto& point : result.points) {
+        scaled_error += std::abs(point.forecast_price - point.actual_price) / point.naive_error_scale;
+    }
+    REQUIRE(result.selected_model.mean_absolute_scaled_error == Catch::Approx(scaled_error / 2.0));
+    auto scaled_prices = prices;
+    for (auto& price : scaled_prices) {
+        price *= 5.0;
+    }
+    const auto scaled = mc::forecasting::walk_forward_backtest(
+        scaled_prices, mc::forecasting::BacktestConfig{3, 2, 1, 252.0});
+    REQUIRE(scaled.selected_model.mean_absolute_scaled_error ==
+            Catch::Approx(result.selected_model.mean_absolute_scaled_error).epsilon(1e-10));
+}
+
+TEST_CASE("undefined scales and unavailable same-horizon history remain undefined", "[forecasting][backtest]") {
+    const std::array flat{100.0, 100.0, 100.0, 100.0, 100.0, 100.0};
+    const auto result = mc::forecasting::walk_forward_backtest(
+        flat, mc::forecasting::BacktestConfig{2, 3, 1, 252.0});
+    REQUIRE(std::isnan(result.selected_model.mean_absolute_scaled_error));
+    REQUIRE(std::isnan(result.probability.historical_up_brier_score));
+    REQUIRE(result.probability.always_up_accuracy == 0.0);
+    REQUIRE(result.probability.always_up_brier_score == 1.0);
+}
+
+TEST_CASE("bootstrap block configuration and sensitivity preserve point forecasts", "[forecasting][backtest][bootstrap]") {
+    std::array<double, 100> prices{};
+    for (std::size_t index = 0; index < prices.size(); ++index) {
+        prices[index] = 100.0 + static_cast<double>(index % 7);
+    }
+    mc::forecasting::BacktestConfig config{3, 2, 1, 252.0};
+    config.bootstrap_samples = 100;
+    const auto original = mc::forecasting::walk_forward_backtest(prices, config);
+    config.bootstrap_block_size = 3;
+    config.bootstrap_sensitivity = true;
+    const auto result = mc::forecasting::walk_forward_backtest(prices, config);
+    REQUIRE(result.mae_improvement.block_length == 3);
+    REQUIRE(result.bootstrap_sensitivity.size() == 3);
+    REQUIRE(result.bootstrap_sensitivity[0].block_length == 3);
+    REQUIRE(result.bootstrap_sensitivity[1].block_length == 6);
+    REQUIRE(result.bootstrap_sensitivity[2].block_length == 12);
+    REQUIRE(std::isnan(result.bootstrap_sensitivity[2].lower_95));
+    for (std::size_t index = 0; index < result.points.size(); ++index) {
+        REQUIRE(result.points[index].forecast_price == original.points[index].forecast_price);
+    }
+    const auto repeated = mc::forecasting::walk_forward_backtest(prices, config);
+    REQUIRE(repeated.mae_improvement.lower_95 == result.mae_improvement.lower_95);
+    config.bootstrap_block_size = prices.size();
+    REQUIRE_THROWS_AS(mc::forecasting::walk_forward_backtest(prices, config), std::invalid_argument);
+}
+
 TEST_CASE("explicit forecast lookbacks match walk-forward training at each origin", "[forecasting][backtest]") {
     const std::array prices{100.0, 101.0, 99.0, 103.0, 98.0, 104.0, 97.0, 105.0, 96.0};
     for (const auto estimator : {mc::forecasting::VolatilityEstimator::sample,
