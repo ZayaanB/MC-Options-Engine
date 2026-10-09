@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("benchmark_forecasts", ROOT / "python/benchmark_forecasts.py")
 benchmark = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(benchmark)
+sys.path.insert(0, str(ROOT / "python"))
+import compare_forecasts
 
 
 class BenchmarkTests(unittest.TestCase):
@@ -54,6 +56,39 @@ class BenchmarkTests(unittest.TestCase):
 
     def save(self):
         self.manifest.write_text(json.dumps(self.config), encoding="utf-8")
+
+    def test_comparison_uses_common_validation_origins_and_baseline(self):
+        execute = subprocess.run
+
+        def checked(command, **kwargs):
+            history = Path(command[command.index("--csv") + 1])
+            with history.open() as stream:
+                rows = list(csv.DictReader(stream))
+            self.assertTrue(all(row["Date"] < self.config["holdout_start"] for row in rows))
+            return execute(command, **kwargs)
+
+        with patch("subprocess.run", side_effect=checked):
+            report = compare_forecasts.compare(self.manifest, self.engine, lookbacks=(10, 13))
+        self.assertEqual(len(report["candidates"]), 12)
+        self.assertEqual(len(report["ranking"]), 13)
+        self.assertEqual(report["phase"], "validation")
+        for group in report["groups"]:
+            self.assertTrue(group["origins"])
+            self.assertTrue(all(self.config["validation_start"] <= day < self.config["holdout_start"]
+                                for day in group["origins"]))
+            self.assertEqual(len(group["metrics"]), 12)
+            baselines = [metric["latest_price"]["mae"] for metric in group["metrics"]]
+            self.assertTrue(all(value == baselines[0] for value in baselines))
+        scores = [entry["mean_relative_mae"] for entry in report["ranking"]
+                  if entry["mean_relative_mae"] is not None]
+        chosen = next(entry for entry in report["ranking"] if entry["candidate"] == report["selected"])
+        self.assertEqual(chosen["mean_relative_mae"], min(scores))
+        self.assertEqual(report, compare_forecasts.compare(self.manifest, self.engine, lookbacks=(10, 13)))
+
+    def test_comparison_rejects_invalid_windows(self):
+        for windows in ((), (10, 10), (True,), (1,)):
+            with self.assertRaises(ValueError):
+                compare_forecasts.compare(self.manifest, self.engine, lookbacks=windows)
 
     def test_manifest_rejects_ambiguous_or_unfrozen_settings(self):
         for key, value in (("lookback_days", True), ("lookback_days", 1),

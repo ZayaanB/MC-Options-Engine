@@ -43,6 +43,30 @@ for each run. JSON records the manifest, input/executable hashes, platform,
 per-stock metrics, and full-precision forecast rows. It never overwrites an
 existing output and does not pool dollar errors across stocks.
 
+## Compare configurations (Day 35)
+
+```bash
+python3 python/compare_forecasts.py \
+  --manifest Notes-dont-commit/benchmark.json --engine build/mcprice \
+  --output Notes-dont-commit/comparison.json
+```
+
+This validation-only runner compares 18 fixed configurations: 63/126/252-session
+lookbacks, sample/EWMA volatility, and zero/historical/50%-shrunk drift. EWMA
+decay stays at 0.94. Allow at least 252 sessions before validation.
+All candidates use common origins, sampled every horizon sessions, with no
+holdout targets supplied to the engine. The score equally weights stock/horizon
+MAE ratios against latest-price forecasts. Latest price itself can win; ties
+favor it, then the documented candidate order. Perfect-baseline groups are
+excluded when both errors are zero; a candidate failing one is ineligible.
+If all groups are flat, latest price wins. JSON includes every trial and date.
+
+This is model selection, not an independent accuracy test. No bootstrap
+significance is claimed after searching candidates. Freeze the chosen procedure
+before evaluating untouched data. The original benchmark command still tests
+historical/sample with its manifest lookback; it does not load this selection.
+Research and suggested next experiments are in [model research](forecast-model-research.md).
+
 ## Run the final holdout
 
 Freeze your procedure after validation, then run the final test explicitly:

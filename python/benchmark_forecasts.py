@@ -211,10 +211,17 @@ def bootstrap_sensitivity(points, settings):
     return results
 
 
-def run_benchmark(manifest, engine, phase):
+def run_benchmark(manifest, engine, phase, *, model=None, lookback=None, dense=False):
     if phase not in {"validation", "holdout"}:
         raise ValueError("phase must be validation or holdout")
     config, manifest_hash = read_manifest(manifest)
+    model = model or {"drift": "historical", "volatility": "sample"}
+    if set(model) != {"drift", "volatility"} or model["drift"] not in {
+            "historical", "zero", "shrinkage"} or model["volatility"] not in {"sample", "ewma"}:
+        raise ValueError("unsupported comparison model")
+    lookback = config["lookback_days"] if lookback is None else lookback
+    if type(lookback) is not int or lookback < 2:
+        raise ValueError("lookback must be an integer of at least two")
     assets = [(asset, read_asset(asset, manifest.parent)) for asset in config["assets"]]
     engine_raw = engine.read_bytes()
     results = []
@@ -237,9 +244,14 @@ def run_benchmark(manifest, engine, phase):
             for horizon in HORIZONS:
                 command = [str(executable), "backtest", "--csv", str(history),
                            "--metadata", str(provenance), "--price-column", metadata["price_column"],
-                           "--lookback-days", str(config["lookback_days"]),
-                           "--horizon-days", str(horizon), "--step-days", str(horizon),
+                           "--lookback-days", str(lookback),
+                           "--drift-model", model["drift"], "--volatility-model", model["volatility"],
+                           "--horizon-days", str(horizon), "--step-days", str(1 if dense else horizon),
                            "--bootstrap-samples", "100", "--format", "csv"]
+                if model["drift"] == "shrinkage":
+                    command.extend(["--drift-shrinkage", "0.5"])
+                if model["volatility"] == "ewma":
+                    command.extend(["--ewma-decay", "0.94"])
                 try:
                     process = subprocess.run(command, capture_output=True, text=True, check=True, timeout=300)
                 except subprocess.CalledProcessError as error:
@@ -259,9 +271,9 @@ def run_benchmark(manifest, engine, phase):
                 metrics = summarize(points)
                 bootstrap_settings = config.get("bootstrap", {"samples": 2000, "seed": 42,
                                                                "block_sizes": [1, 2, 4]})
-                sensitivity = bootstrap_sensitivity(points, bootstrap_settings)
+                sensitivity = [] if dense else bootstrap_sensitivity(points, bootstrap_settings)
                 results.append({"symbol": asset["symbol"], "horizon_days": horizon,
-                                "step_days": horizon, "forecasts": len(points),
+                                "step_days": 1 if dense else horizon, "forecasts": len(points),
                                 "first_origin": points[0]["origin_date"],
                                 "last_target": points[-1]["target_date"],
                                 "metrics": metrics, "points": points,
@@ -269,7 +281,8 @@ def run_benchmark(manifest, engine, phase):
     return {"schema_version": 1, "phase": phase, "manifest_sha256": manifest_hash,
             "engine_sha256": sha256(engine_raw), "python_version": platform.python_version(),
             "platform": platform.platform(), "config": config,
-            "model": {"drift": "historical", "volatility": "sample", "trading_days": 252},
+            "model": {**model, "trading_days": 252, "lookback_days": lookback,
+                      "drift_shrinkage": 0.5, "ewma_decay": 0.94},
             "provenance": [metadata for _, (_, _, metadata, _) in assets],
             "bootstrap": config.get("bootstrap", {"samples": 2000, "seed": 42, "block_sizes": [1, 2, 4]}),
             "limitations": ["No exchange-calendar validation; metadata is declared, not verified.",
