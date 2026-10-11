@@ -19,6 +19,7 @@ benchmark = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(benchmark)
 sys.path.insert(0, str(ROOT / "python"))
 import compare_forecasts
+import ridge_forecasts
 
 
 class BenchmarkTests(unittest.TestCase):
@@ -56,6 +57,88 @@ class BenchmarkTests(unittest.TestCase):
 
     def save(self):
         self.manifest.write_text(json.dumps(self.config), encoding="utf-8")
+
+    def test_ridge_matches_closed_form_and_handles_constant_features(self):
+        self.assertAlmostEqual(ridge_forecasts.ridge_predict([[0], [1], [2]], [1, 3, 5], [3]),
+                               6.0)
+        self.assertEqual(ridge_forecasts.ridge_predict([[4], [4]], [2, 6], [4]), 4)
+        self.assertEqual(ridge_forecasts.ridge_predict([[0, 0], [1, 1], [2, 2]],
+                         [1, 3, 5], [1, 1]), 3)
+        features = [[-1, -1], [-1, 1], [1, -1], [1, 1]]
+        targets = [3 + 2 * x - 4 * y for x, y in features]
+        self.assertAlmostEqual(ridge_forecasts.ridge_predict(features, targets, [2, 3]), -3.4)
+        for penalty in (0, -1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                ridge_forecasts.ridge_predict([[0], [1]], [1, 2], [3], penalty)
+        with self.assertRaises(ValueError):
+            ridge_forecasts.ridge_predict([[0], [float("nan")]], [1, 2], [3])
+
+    def test_ridge_forecast_flat_history_and_training_boundary(self):
+        result = ridge_forecasts.forecast([100.0] * 100, 20, 60)
+        self.assertEqual(result["forecast_price"], 100)
+        self.assertEqual(result["predicted_log_return"], 0)
+        self.assertEqual(result["last_training_target_index"], 99)
+        self.assertEqual(result["training_rows"], 41)
+        for prices, horizon, window in (([100] * 20, 20, 60), ([100] * 100, 0, 60),
+                                       ([100] * 100, 1, 10), ([100, 0], 1, 60)):
+            with self.assertRaises(ValueError):
+                ridge_forecasts.forecast(prices, horizon, window)
+
+    def test_ridge_validation_is_deterministic_and_ignores_future_prices(self):
+        self.config["lookback_days"] = 60
+        self.config["validation_start"] = self.dates[65]
+        self.save()
+        original = ridge_forecasts.evaluate(self.manifest)
+        self.assertEqual(original, ridge_forecasts.evaluate(self.manifest))
+        output = self.directory / "ridge-validation.json"
+        process = subprocess.run([sys.executable, str(ROOT / "python/ridge_forecasts.py"),
+                                 "--manifest", str(self.manifest), "--output", str(output)],
+                                 capture_output=True, text=True)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(original, json.loads(output.read_text()))
+        for group in original["results"]:
+            errors = [abs(p["forecast_price"] - p["actual_price"]) for p in group["points"]]
+            self.assertAlmostEqual(group["metrics"]["ridge"]["mae"], statistics.mean(errors))
+            for point in group["points"]:
+                self.assertLess(point["target_date"], self.config["holdout_start"])
+            if group["symbol"] == "SYNTH_B":
+                self.assertEqual(group["metrics"]["ridge"]["mae"], 0)
+        asset = self.config["assets"][0]
+        path = self.directory / asset["csv"]
+        with path.open() as stream:
+            rows = list(csv.reader(stream))
+        for index, row in enumerate(rows[1:]):
+            if index >= 100:
+                row[1] = str(float(row[1]) * 3)
+        with path.open("w", newline="") as stream:
+            csv.writer(stream).writerows(rows)
+        asset["csv_sha256"] = benchmark.sha256(path.read_bytes())
+        self.save()
+        self.assertEqual(original["results"], ridge_forecasts.evaluate(self.manifest)["results"])
+        for index, row in enumerate(rows[1:]):
+            if index >= 80:
+                row[1] = str(float(row[1]) * 2)
+        with path.open("w", newline="") as stream:
+            csv.writer(stream).writerows(rows)
+        asset["csv_sha256"] = benchmark.sha256(path.read_bytes())
+        self.save()
+        changed = ridge_forecasts.evaluate(self.manifest)
+        for before, after in zip(original["results"], changed["results"]):
+            earlier = {p["origin_date"]: p for p in after["points"]}
+            for point in before["points"]:
+                if point["origin_date"] < self.dates[80]:
+                    prediction = earlier[point["origin_date"]]
+                    self.assertEqual(point["forecast_price"], prediction["forecast_price"])
+                    self.assertEqual(point["predicted_log_return"], prediction["predicted_log_return"])
+
+    def test_ridge_cli_preserves_existing_output(self):
+        output = self.directory / "ridge.json"
+        output.write_text("keep")
+        process = subprocess.run([sys.executable, str(ROOT / "python/ridge_forecasts.py"),
+                                 "--manifest", str(self.manifest), "--output", str(output)],
+                                 capture_output=True, text=True)
+        self.assertNotEqual(process.returncode, 0)
+        self.assertEqual(output.read_text(), "keep")
 
     def test_comparison_uses_common_validation_origins_and_baseline(self):
         execute = subprocess.run
