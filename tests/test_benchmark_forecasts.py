@@ -1,4 +1,5 @@
 import csv
+import copy
 import importlib.util
 import json
 import math
@@ -20,6 +21,7 @@ spec.loader.exec_module(benchmark)
 sys.path.insert(0, str(ROOT / "python"))
 import compare_forecasts
 import ridge_forecasts
+import ensemble_forecasts
 
 
 class BenchmarkTests(unittest.TestCase):
@@ -58,6 +60,66 @@ class BenchmarkTests(unittest.TestCase):
     def save(self):
         self.manifest.write_text(json.dumps(self.config), encoding="utf-8")
 
+    def test_ensemble_blend_and_metrics(self):
+        self.assertEqual(ensemble_forecasts.blend(100, 120), 110)
+        self.assertEqual(ensemble_forecasts.blend(120, 100), 110)
+        for price in (5e-324, 100, sys.float_info.max):
+            self.assertEqual(ensemble_forecasts.blend(price, price), price)
+        self.assertTrue(math.isfinite(ensemble_forecasts.blend(sys.float_info.max, 1)))
+        for price in (0, -1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                ensemble_forecasts.blend(100, price)
+        points = [{"current_price": 100, "forecast_price": 110, "actual_price": 120},
+                  {"current_price": 100, "forecast_price": 90, "actual_price": 100}]
+        metrics = ensemble_forecasts.point_metrics(points, "forecast_price")
+        self.assertEqual(metrics["mae"], 10)
+        self.assertAlmostEqual(metrics["rmse"], 10)
+        self.assertEqual(metrics["directional_accuracy"], 0.5)
+        self.assertIsNone(ensemble_forecasts.point_metrics(points, "current_price")["directional_accuracy"])
+        with self.assertRaises(ValueError):
+            ensemble_forecasts.point_metrics([], "forecast_price")
+
+    def test_ensemble_selection_including_perfect_baseline(self):
+        for actual, winner in ((100, "latest_price"), (110, "ensemble"), (120, "ridge")):
+            source = {"model": {"name": "ridge"}, "source_sha256": "original",
+                      "limitations": [], "results": [{"points": [{"current_price": 100,
+                      "forecast_price": 120, "actual_price": actual, "predicted_log_return": 0.1}]}]}
+            with patch.object(ensemble_forecasts, "evaluate_ridge", return_value=copy.deepcopy(source)):
+                report = ensemble_forecasts.evaluate(self.manifest)
+            self.assertEqual(report["selected"], winner)
+            self.assertEqual(report["ridge_source_sha256"], "original")
+            if actual == 100:
+                self.assertIsNone(report["ranking"][1]["mean_relative_mae"])
+        source["results"][0]["points"][0].update(forecast_price=100, actual_price=100)
+        with patch.object(ensemble_forecasts, "evaluate_ridge", return_value=source):
+            self.assertEqual(ensemble_forecasts.evaluate(self.manifest)["selected"], "latest_price")
+
+    def test_ensemble_cli_and_paired_validation(self):
+        self.config["lookback_days"] = 60
+        self.config["validation_start"] = self.dates[65]
+        self.save()
+        ridge = ridge_forecasts.evaluate(self.manifest)
+        report = ensemble_forecasts.evaluate(self.manifest)
+        self.assertEqual(report, ensemble_forecasts.evaluate(self.manifest))
+        for original, group in zip(ridge["results"], report["results"]):
+            self.assertEqual(original["metrics"]["ridge"]["mae"], group["metrics"]["ridge"]["mae"])
+            for before, after in zip(original["points"], group["points"]):
+                self.assertEqual(before["forecast_price"], after["ridge_price"])
+                self.assertEqual(after["forecast_price"],
+                                 ensemble_forecasts.blend(before["current_price"], before["forecast_price"]))
+                self.assertLess(after["target_date"], self.config["holdout_start"])
+                self.assertEqual(before["origin_date"], after["origin_date"])
+                self.assertNotIn("predicted_log_return", after)
+        output = self.directory / "ensemble.json"
+        command = [sys.executable, str(ROOT / "python/ensemble_forecasts.py"),
+                   "--manifest", str(self.manifest), "--output", str(output)]
+        process = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(report, json.loads(output.read_text()))
+        prior = output.read_bytes()
+        self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+        self.assertEqual(prior, output.read_bytes())
+
     def test_ridge_matches_closed_form_and_handles_constant_features(self):
         self.assertAlmostEqual(ridge_forecasts.ridge_predict([[0], [1], [2]], [1, 3, 5], [3]),
                                6.0)
@@ -89,6 +151,7 @@ class BenchmarkTests(unittest.TestCase):
         self.config["validation_start"] = self.dates[65]
         self.save()
         original = ridge_forecasts.evaluate(self.manifest)
+        original_ensemble = ensemble_forecasts.evaluate(self.manifest)
         self.assertEqual(original, ridge_forecasts.evaluate(self.manifest))
         output = self.directory / "ridge-validation.json"
         process = subprocess.run([sys.executable, str(ROOT / "python/ridge_forecasts.py"),
@@ -115,6 +178,7 @@ class BenchmarkTests(unittest.TestCase):
         asset["csv_sha256"] = benchmark.sha256(path.read_bytes())
         self.save()
         self.assertEqual(original["results"], ridge_forecasts.evaluate(self.manifest)["results"])
+        self.assertEqual(original_ensemble["results"], ensemble_forecasts.evaluate(self.manifest)["results"])
         for index, row in enumerate(rows[1:]):
             if index >= 80:
                 row[1] = str(float(row[1]) * 2)
@@ -123,6 +187,12 @@ class BenchmarkTests(unittest.TestCase):
         asset["csv_sha256"] = benchmark.sha256(path.read_bytes())
         self.save()
         changed = ridge_forecasts.evaluate(self.manifest)
+        changed_ensemble = ensemble_forecasts.evaluate(self.manifest)
+        for before, after in zip(original_ensemble["results"], changed_ensemble["results"]):
+            earlier = {p["origin_date"]: p for p in after["points"]}
+            for point in before["points"]:
+                if point["origin_date"] < self.dates[80]:
+                    self.assertEqual(point["forecast_price"], earlier[point["origin_date"]]["forecast_price"])
         for before, after in zip(original["results"], changed["results"]):
             earlier = {p["origin_date"]: p for p in after["points"]}
             for point in before["points"]:
