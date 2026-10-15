@@ -95,24 +95,27 @@ def distribution_metrics(points, name):
     return result
 
 
-def evaluate(manifest):
+def evaluate(manifest, phase="validation"):
+    if phase not in {"validation", "holdout"}:
+        raise ValueError("phase must be validation or holdout")
     config, digest = read_manifest(manifest)
     results, provenance = [], []
     for asset in config["assets"]:
         header, rows, metadata, _ = read_asset(asset, manifest.parent)
         column = next(csv.reader([header])).index(metadata["price_column"])
         retained = [(day, float(next(csv.reader([line]))[column])) for day, line in rows
-                    if day < config["holdout_start"] and day <= config["test_end"]]
+                    if day <= config["test_end"] and (phase == "holdout" or day < config["holdout_start"])]
         dates, prices = zip(*retained) if retained else ((), ())
         provenance.append(metadata)
         for horizon in HORIZONS:
-            points = rolling_points(dates, prices, horizon, config["lookback_days"], config["validation_start"])
+            start = config["holdout_start"] if phase == "holdout" else config["validation_start"]
+            points = rolling_points(dates, prices, horizon, config["lookback_days"], start)
             metrics = {name: {"point": point_metrics(points, key),
                              "distribution": distribution_metrics(points, name)}
                        for name, key in (("ensemble", "forecast_price"), ("latest_price", "current_price"))}
             results.append({"symbol": asset["symbol"], "horizon_days": horizon,
                             "step_days": horizon, "forecasts": len(points), "metrics": metrics, "points": points})
-    return {"schema_version": 1, "phase": "validation", "manifest_sha256": digest, "config": config,
+    return {"schema_version": 1, "phase": phase, "manifest_sha256": digest, "config": config,
             "provenance": provenance, "python_version": platform.python_version(), "platform": platform.platform(),
             "source_hashes": {name: sha256(Path(__file__).with_name(name).read_bytes()) for name in
                               ("residual_forecasts.py", "ridge_forecasts.py", "ensemble_forecasts.py", "benchmark_forecasts.py")},
@@ -126,7 +129,8 @@ def evaluate(manifest):
                             "Twenty to sixty errors poorly resolve tails and may miss future regimes.",
                             "Nonoverlapping targets still share training data and can have dependent errors.",
                             "Empirical rise frequencies are not independently calibrated probabilities.",
-                            "Validation only; no holdout scored, no predictive-edge claim.",
+                            ("Validation only; no holdout scored, no predictive-edge claim." if phase == "validation"
+                             else "Sequential holdout evaluation; earlier observed outcomes enter later refits and calibration."),
                             "Warmup and grid anchoring change dates versus earlier reports; compare only paired rows."],
             "results": results}
 

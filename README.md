@@ -172,6 +172,7 @@ Vega is reported per one volatility percentage point.
 
 For multi-stock accuracy testing with a frozen validation/holdout split, see
 the [forecast benchmark guide](docs/forecast-benchmark.md).
+For the experimental ensemble's final test, use the [freeze/holdout workflow](docs/final-forecast.md).
 
 ```bash
 python3 -m venv .venv

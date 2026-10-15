@@ -69,6 +69,7 @@ Research and suggested next experiments are in [model research](forecast-model-r
 The separate [ridge return model](ridge-forecast.md) is a validation-only Day 36 experiment.
 Day 37 adds a [fixed 50/50 ensemble](ensemble-forecast.md) with paired comparisons.
 Day 38 adds [out-of-sample residual ranges](residual-forecast.md) and coverage checks.
+Day 39 provides the [frozen final-holdout workflow](final-forecast.md).
 
 ## Run the final holdout
 
