@@ -147,6 +147,8 @@ if(BUILD_TESTING)
         add_test(NAME forecast_benchmark_runner
             COMMAND ${CMAKE_COMMAND} -E env MC_ENGINE=$<TARGET_FILE:mcprice>
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_forecasts.py)
+        add_test(NAME forecast_residual_runner
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_residual_forecasts.py)
     endif()
     add_test(NAME history_cli_workflow
         COMMAND ${CMAKE_COMMAND}
