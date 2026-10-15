@@ -7,11 +7,13 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 import residual_forecasts as residual
+import final_forecast
 
 
 class ResidualTests(unittest.TestCase):
@@ -47,6 +49,101 @@ class ResidualTests(unittest.TestCase):
 
     def save(self):
         self.manifest.write_text(json.dumps(self.config), encoding="utf-8")
+
+    def test_frozen_final_workflow_and_holdout_boundaries(self):
+        validation = self.directory / "validation.json"
+        final_forecast.save_new(validation, residual.evaluate(self.manifest))
+        procedure = final_forecast.freeze(self.manifest, validation, "ensemble")
+        procedure_path = self.directory / "procedure.json"
+        final_forecast.save_new(procedure_path, procedure)
+        output = self.directory / "holdout.json"
+        marker = self.directory / "procedure.json.used"
+        with self.assertRaisesRegex(ValueError, "confirm"):
+            final_forecast.run_final(procedure_path, self.manifest, output)
+        self.assertFalse(marker.exists())
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            final_forecast.run_final(procedure_path, self.manifest, marker, True)
+        self.assertFalse(marker.exists())
+        report = final_forecast.run_final(procedure_path, self.manifest, output, True)
+        self.assertEqual(report, json.loads(output.read_text()))
+        self.assertTrue(marker.exists())
+        self.assertEqual(report["phase"], "holdout")
+        self.assertEqual(report["primary_model"], "ensemble")
+        ratios = []
+        for group in report["results"]:
+            for point in group["points"]:
+                self.assertGreaterEqual(point["origin_date"], self.config["holdout_start"])
+                self.assertLessEqual(point["target_date"], self.config["test_end"])
+                self.assertLessEqual(point["last_calibration_target"], point["origin_date"])
+            baseline = group["metrics"]["latest_price"]["point"]["mae"]
+            if baseline:
+                ratios.append(group["metrics"]["ensemble"]["point"]["mae"] / baseline)
+        self.assertAlmostEqual(report["primary_mean_relative_mae"], sum(ratios) / len(ratios))
+        with self.assertRaisesRegex(ValueError, "already recorded"):
+            final_forecast.run_final(procedure_path, self.manifest, self.directory / "second.json", True)
+        with self.assertRaises(FileExistsError):
+            final_forecast.save_new(procedure_path, procedure)
+
+    def test_final_rejects_stale_reports_sources_and_inputs(self):
+        validation = self.directory / "validation.json"
+        report = residual.evaluate(self.manifest)
+        final_forecast.save_new(validation, report)
+        procedure = final_forecast.freeze(self.manifest, validation, "latest_price")
+        changed = {**procedure, "source_hashes": {}}
+        with self.assertRaisesRegex(ValueError, "source"):
+            final_forecast.verify(changed, self.manifest)
+        with self.assertRaisesRegex(ValueError, "Python"):
+            final_forecast.verify({**procedure, "python_version": "0.0"}, self.manifest)
+        with self.assertRaisesRegex(ValueError, "platform"):
+            final_forecast.verify({**procedure, "platform": "other"}, self.manifest)
+        report["phase"] = "holdout"
+        validation.write_text(json.dumps(report))
+        with self.assertRaisesRegex(ValueError, "validation report"):
+            final_forecast.freeze(self.manifest, validation, "ensemble")
+        self.config["lookback_days"] = 61
+        self.save()
+        with self.assertRaisesRegex(ValueError, "manifest"):
+            final_forecast.verify(procedure, self.manifest)
+        self.config["lookback_days"] = 60
+        self.save()
+        history = self.directory / self.config["assets"][0]["csv"]
+        history.write_bytes(history.read_bytes() + b"\n")
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            final_forecast.verify(procedure, self.manifest)
+
+    def test_final_cli_freezes_without_scoring_and_requires_confirmation(self):
+        validation = self.directory / "validation.json"
+        final_forecast.save_new(validation, residual.evaluate(self.manifest))
+        procedure_path = self.directory / "procedure.json"
+        freeze_command = [sys.executable, str(ROOT / "python/final_forecast.py"), "freeze",
+                          "--manifest", str(self.manifest), "--validation", str(validation),
+                          "--model", "latest_price", "--output", str(procedure_path)]
+        process = subprocess.run(freeze_command, capture_output=True, text=True)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertFalse(procedure_path.with_name("procedure.json.used").exists())
+        run_command = [sys.executable, str(ROOT / "python/final_forecast.py"), "run",
+                       "--manifest", str(self.manifest), "--procedure", str(procedure_path),
+                       "--output", str(self.directory / "final.json")]
+        self.assertNotEqual(subprocess.run(run_command, capture_output=True).returncode, 0)
+        process = subprocess.run(run_command + ["--confirm-untouched-holdout"], capture_output=True, text=True)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        report = json.loads((self.directory / "final.json").read_text())
+        self.assertEqual(report["primary_model"], "latest_price")
+        self.assertEqual(report["primary_mean_relative_mae"], 1)
+
+    def test_failed_final_attempt_preserves_marker(self):
+        validation = self.directory / "validation.json"
+        final_forecast.save_new(validation, residual.evaluate(self.manifest))
+        procedure_path = self.directory / "procedure.json"
+        final_forecast.save_new(procedure_path, final_forecast.freeze(self.manifest, validation, "ensemble"))
+        output = self.directory / "holdout.json"
+        with patch.object(final_forecast, "evaluate", side_effect=ValueError("simulated failure")):
+            with self.assertRaisesRegex(ValueError, "simulated"):
+                final_forecast.run_final(procedure_path, self.manifest, output, True)
+        self.assertTrue(self.directory.joinpath("procedure.json.used").exists())
+        self.assertFalse(output.exists())
+        with self.assertRaisesRegex(ValueError, "already recorded"):
+            final_forecast.run_final(procedure_path, self.manifest, output, True)
 
     def test_empirical_quantiles_probabilities_and_limits(self):
         distribution = residual.empirical_distribution(100, 100, [-0.1, 0, 0.1, 0.2])
