@@ -129,6 +129,13 @@ def read_asset(asset, directory):
     return lines[0].removesuffix("\r"), rows, metadata, metadata_raw
 
 
+def root_mean_square(values):
+    if not values or any(not math.isfinite(value) for value in values):
+        raise ValueError("RMSE requires nonempty finite errors")
+    scale = max(abs(value) for value in values)
+    return scale * math.sqrt(math.fsum((value / scale) ** 2 for value in values) / len(values)) if scale else 0.0
+
+
 def summarize(points):
     if not points:
         raise ValueError("split has no eligible forecasts; extend history or adjust split dates")
@@ -143,7 +150,7 @@ def summarize(points):
             if directional else None)
         result[name] = {
             "mae": statistics.mean(abs(error) for error in errors),
-            "rmse": math.sqrt(statistics.mean(error * error for error in errors)),
+            "rmse": root_mean_square(errors),
             "mape": statistics.mean(abs(error) / point["actual_price"]
                                     for error, point in zip(errors, points)),
             "directional_predictions": len(directional), "directional_accuracy": accuracy}

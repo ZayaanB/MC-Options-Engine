@@ -5,7 +5,7 @@ import platform
 import statistics
 from pathlib import Path
 
-from benchmark_forecasts import read_asset, read_manifest, sha256, unique_object
+from benchmark_forecasts import HORIZONS, read_asset, read_manifest, sha256, unique_object
 from residual_forecasts import evaluate
 
 
@@ -15,10 +15,6 @@ SOURCES = ("residual_forecasts.py", "ridge_forecasts.py", "ensemble_forecasts.py
 
 def source_hashes():
     return {name: sha256(Path(__file__).with_name(name).read_bytes()) for name in SOURCES}
-
-
-def read_json(path):
-    return json.loads(path.read_bytes(), object_pairs_hook=unique_object)
 
 
 def check_inputs(manifest):
@@ -43,6 +39,32 @@ def freeze(manifest, validation, model):
             report.get("platform") != platform.platform() or
             report.get("source_hashes") != expected or not report.get("results")):
         raise ValueError("require a current residual validation report matching inputs and source hashes")
+    groups = report["results"]
+    expected_groups = {(asset["symbol"], horizon) for asset in config["assets"] for horizon in HORIZONS}
+    seen = set()
+    if not isinstance(groups, list):
+        raise ValueError("validation report requires complete scored groups")
+    for group in groups:
+        if not isinstance(group, dict):
+            raise ValueError("invalid validation group")
+        key = (group.get("symbol"), group.get("horizon_days"))
+        points = group.get("points")
+        if key not in expected_groups or key in seen or not isinstance(points, list) or not points:
+            raise ValueError("validation report requires distinct complete scored groups")
+        if group.get("forecasts") != len(points):
+            raise ValueError("validation forecast count does not match points")
+        previous_origin = ""
+        for point in points:
+            if (not isinstance(point, dict) or not isinstance(point.get("origin_date"), str) or
+                    not isinstance(point.get("target_date"), str) or not
+                    config["validation_start"] <= point["origin_date"] < point["target_date"] < config["holdout_start"]):
+                raise ValueError("validation points cross the frozen split")
+            if point["origin_date"] <= previous_origin:
+                raise ValueError("validation origins must be distinct and increasing")
+            previous_origin = point["origin_date"]
+        seen.add(key)
+    if seen != expected_groups:
+        raise ValueError("validation report is missing asset/horizon groups")
     return {"schema_version": 1, "manifest_sha256": digest, "source_hashes": hashes,
             "validation_sha256": sha256(raw), "primary_model": model,
             "python_version": platform.python_version(), "platform": platform.platform(), "config": config,

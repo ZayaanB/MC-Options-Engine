@@ -22,8 +22,9 @@ python3 python/final_forecast.py freeze \
 ```
 
 Use `--model latest_price` instead if validation does not justify complexity.
-Freezing checks input identities and matching validation/source hashes; it does
-not score holdout targets. Preserve the validation report and procedure file.
+Freezing checks input identities and matching validation/source hashes. It
+requires every stock/horizon group and rejects duplicates or split-crossing
+rows without scoring holdout targets. Preserve the validation report and procedure file.
 The ridge penalty, 50/50 weights, horizons, calibration windows and quantile
 method remain fixed in the hashed source. Source, platform or Python-version changes
 require renewed validation before freezing, not a silent final-test adjustment.
