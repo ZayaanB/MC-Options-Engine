@@ -41,10 +41,14 @@ std::string_view take_value(const std::span<const std::string_view> arguments,
     return arguments[index];
 }
 
-}
-
-PriceOptions parse_price_options(const std::span<const std::string_view> arguments) {
+PriceOptions parse_options(const std::span<const std::string_view> arguments,
+                           const bool greeks_only) {
     PriceOptions options;
+    options.include_greeks = greeks_only;
+    if (greeks_only) {
+        options.method = PricingMethod::monte_carlo;
+    }
+    bool bump_requested = false;
     std::vector<std::string_view> seen;
     seen.reserve(arguments.size());
 
@@ -61,6 +65,16 @@ PriceOptions parse_price_options(const std::span<const std::string_view> argumen
 
         if (argument == "--antithetic") {
             options.simulation.antithetic = true;
+        } else if (argument == "--greeks") {
+            options.include_greeks = true;
+        } else if (argument == "--spot-bump") {
+            options.greeks.spot_bump =
+                parse_double(take_value(arguments, index, argument), argument);
+            bump_requested = true;
+        } else if (argument == "--vol-bump") {
+            options.greeks.volatility_bump =
+                parse_double(take_value(arguments, index, argument), argument);
+            bump_requested = true;
         } else if (argument == "--type") {
             const auto value = take_value(arguments, index, argument);
             if (value == "call") {
@@ -73,6 +87,9 @@ PriceOptions parse_price_options(const std::span<const std::string_view> argumen
                 throw std::invalid_argument{"--type must be call, put, or asian-call"};
             }
         } else if (argument == "--method") {
+            if (greeks_only) {
+                throw std::invalid_argument{"greeks uses Monte Carlo; --method is a price option"};
+            }
             const auto value = take_value(arguments, index, argument);
             if (value == "mc") {
                 options.method = PricingMethod::monte_carlo;
@@ -124,7 +141,26 @@ PriceOptions parse_price_options(const std::span<const std::string_view> argumen
             throw std::invalid_argument{"unknown option: " + std::string{argument}};
         }
     }
+    if (options.include_greeks && options.type == OptionType::asian_call) {
+        throw std::invalid_argument{"Greeks are available only for European calls and puts"};
+    }
+    if (options.include_greeks && options.method == PricingMethod::analytical) {
+        throw std::invalid_argument{"--greeks requires --method mc or both"};
+    }
+    if (bump_requested && !options.include_greeks) {
+        throw std::invalid_argument{"Greek bumps require --greeks or the greeks command"};
+    }
     return options;
+}
+
+}
+
+PriceOptions parse_price_options(const std::span<const std::string_view> arguments) {
+    return parse_options(arguments, false);
+}
+
+PriceOptions parse_greeks_options(const std::span<const std::string_view> arguments) {
+    return parse_options(arguments, true);
 }
 
 std::string_view option_type_name(const OptionType type) noexcept {

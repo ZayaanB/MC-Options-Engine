@@ -31,7 +31,7 @@ diffusion, and discount factor. The engine divides observations among workers.
 Each worker owns its RNG and running statistics, then the calling thread joins
 and merges the results in worker order.
 
-The Asian engine advances one price at a time and keeps a running sum. It never
+The Asian engine advances one price at a time and keeps a running average. It never
 stores an `N × M` path matrix. Antithetic mode keeps a second price driven by
 `-Z`; the two payoffs form one statistical observation.
 
@@ -64,6 +64,11 @@ threads, zero Asian steps, and odd antithetic path counts. Worker exceptions are
 captured and rethrown after every thread is joined.
 
 ## Forecasting boundary
+
+The [app guides](../apps/README.md) group pricing, Greeks, stock scenarios,
+prediction experiments and the planned energy project without duplicating
+shared code. CLI Greeks call the existing risk engine; they do not forecast
+stock prices. Energy needs a separate hourly-data boundary and has no runner yet.
 
 Forecasting reads chronological adjusted closes and estimates physical-measure
 log-return drift and volatility. It returns a price distribution, not an option

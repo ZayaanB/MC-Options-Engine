@@ -1,3 +1,4 @@
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
@@ -91,6 +92,19 @@ TEST_CASE("expired Asian call avoids overflowing an unnecessary path sum", "[asi
     const auto result = mc::PathMonteCarloEngine{}.price(call, market, expired, simulation);
     REQUIRE(result.price == 1e308);
     REQUIRE(result.standard_error == 0.0);
+}
+
+TEST_CASE("Asian running average remains finite when an unscaled sum would overflow", "[asian][boundary]") {
+    const mc::MarketData market{1e308, 0.0, 0.0};
+    const mc::OptionParameters option{5e307, 1.0};
+    const mc::ArithmeticAsianCall call{option.strike};
+    for (const bool antithetic : std::array{false, true}) {
+        auto simulation = config(4, 252);
+        simulation.antithetic = antithetic;
+        const auto result = mc::PathMonteCarloEngine{}.price(call, market, option, simulation);
+        REQUIRE(result.price == 5e307);
+        REQUIRE(result.standard_error == 0.0);
+    }
 }
 
 TEST_CASE("Asian call agrees with Black-Scholes when monitored only at maturity",

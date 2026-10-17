@@ -43,6 +43,15 @@ TEST_CASE("analytical Black-Scholes matches the canonical European prices",
             Approx(5.573526022256971).epsilon(1e-12));
 }
 
+TEST_CASE("deep out-of-the-money analytical prices do not round below zero", "[black-scholes][boundary]") {
+    REQUIRE(mc::black_scholes_call(0.20807957436824792, 82.52504728424833,
+                                  -0.23635100115020569, 0.72037004099849089,
+                                  0.046977474183167868) >= 0.0);
+    REQUIRE(mc::black_scholes_put(82.52504728424833, 0.20807957436824792,
+                                 0.23635100115020569, 0.72037004099849089,
+                                 0.046977474183167868) >= 0.0);
+}
+
 TEST_CASE("domain object overloads match scalar Black-Scholes inputs", "[black-scholes]") {
     using Catch::Approx;
 

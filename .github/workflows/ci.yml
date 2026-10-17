@@ -32,3 +32,11 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Test optional forecast models
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m venv .venv-forecast-tests
+          .venv-forecast-tests/bin/python -m pip install -r python/requirements-forecast.txt -r python/requirements-ml.txt
+          .venv-forecast-tests/bin/python tests/test_classical_forecasts.py
+          .venv-forecast-tests/bin/python tests/test_boosted_forecasts.py

@@ -144,6 +144,11 @@ if(BUILD_TESTING)
     add_test(NAME mc_tests COMMAND mc_tests)
     find_package(Python3 3.9 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME stock_history_downloader
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_download_stock_history.py)
+        add_test(NAME greeks_cli_workflow
+            COMMAND ${CMAKE_COMMAND} -E env MC_ENGINE=$<TARGET_FILE:mcprice>
+                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_greeks_cli.py)
         add_test(NAME forecast_benchmark_runner
             COMMAND ${CMAKE_COMMAND} -E env MC_ENGINE=$<TARGET_FILE:mcprice>
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_forecasts.py)
@@ -151,6 +156,8 @@ if(BUILD_TESTING)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_residual_forecasts.py)
         add_test(NAME forecast_classical_runner
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_classical_forecasts.py)
+        add_test(NAME forecast_boosted_runner
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_boosted_forecasts.py)
     endif()
     add_test(NAME history_cli_workflow
         COMMAND ${CMAKE_COMMAND}

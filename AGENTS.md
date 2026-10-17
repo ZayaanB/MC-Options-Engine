@@ -1,91 +1,131 @@
-# AI Development Guide
+# Development guide
 
-## Project
+## Project scope
 
-This repository implements a portable C++20 multithreaded Monte Carlo derivatives pricing and
-risk engine. The primary objectives are quantitative correctness, systems correctness, and clear
-measurement.
+This is a quantitative research workspace: C++20 derivatives pricing and Greeks,
+historical stock scenarios, experimental stock prediction, and a separate planned
+energy-demand forecasting project. Stock/energy forecasting is explicitly in
+scope. It must not silently change risk-neutral option-pricing inputs.
 
-This is not a trading system or stock-price prediction system. Do not add execution, signals,
-portfolio logic, brokerage integration, or forecasting. The engine estimates derivative fair
-values and sensitivities through risk-neutral analytical and Monte Carlo methods.
+No brokerage integration, execution, portfolio management or trading signals.
+Forecasts are research outputs, not demonstrated trading advice. Do not claim
+an accuracy improvement unless matched out-of-sample results support it.
 
-## V1 Scope
+At the start of a new interactive project conversation, ask once:
+"Is this a learning project where you'd like me to use $learn-while-building?"
+If yes, read and follow the skill throughout the conversation. If the preference
+is already explicit, do not ask again. Silence is not agreement. Skip this check
+in unattended runs unless learning mode was explicitly requested.
 
-V1 includes analytical Black-Scholes, European call and put Monte Carlo pricing, streaming
-statistics, confidence intervals, deterministic random-number generation for an identical full
-configuration, multithreading, antithetic variates, finite-difference Delta/Gamma/Vega, an
-arithmetic Asian call, a CLI, tests, benchmarks, and Python analysis and plots.
+## Repository map
 
-Do not add control variates, barriers, Heston, Sobol sequences, CUDA, American options, or other
-stretch goals unless they are explicitly requested after V1 is complete.
+- `include/mc/`, `src/`: public C++ types, pricing, statistics, stock GBM and CLI.
+- `python/`: shared evaluation utilities, stock experiments, downloads and plots.
+- `apps/`: per-tool README entry points; existing shared code is not duplicated.
+- `apps/energy/`: planned dedicated hourly-demand importer and runner.
+- `tests/`: C++ and Python regression tests, including offline downloader tests.
+- `examples/`: small synthetic fixtures and manifest templates, never real results.
+- `benchmarks/`, `results/`: measured performance and reproducibility evidence.
+- `docs/`: methods, workflow and the current [roadmap](docs/roadmap.md).
+- `Notes-dont-commit/`: ignored raw datasets, manifests and private experiment outputs.
 
-## Architecture
+Do not move modules merely for appearance: Python scripts currently share imports
+from `python/`, and CMake names existing source paths. Explain any necessary
+architecture change first, update all callers and test it. Keep one authoritative
+implementation and preserve established commands unless a migration is requested.
 
-Keep instrument logic separate from simulation logic, statistics separate from presentation, and
-analytical pricing separate from Monte Carlo pricing. Prefer focused types with value semantics.
-Do not force terminal-only and path-dependent instruments into one oversized abstraction.
+## Pricing and numerical contract
 
-## Financial and Numerical Contract
+- Zero dividends, flat continuously compounded rates, constant volatility,
+  frictionless markets and risk-neutral GBM. No transaction costs or discrete dividends.
+- Validate finite inputs: positive spot/strike, nonnegative volatility/maturity,
+  positive paths/threads and positive steps for path simulation. Negative rates,
+  zero volatility and zero maturity are valid.
+- European call/put MC prices must be checked against analytical Black-Scholes
+  with statistical tolerances. Report price standard error and a 95% sampling
+  interval; explain when fewer than two independent observations make them undefined.
+- Antithetic path counts are total trajectories and must be even. One pair's
+  average discounted payoff is one independent statistical observation.
+- Asian monitoring uses jT/M for j=1,...,M, excluding today and including maturity.
+  Keep incremental paths/averages; do not store a paths-by-steps matrix.
+- Greek bumps are configurable: default spot bump 1% of spot, volatility bump 0.01.
+  Vega is per one volatility percentage point, not per unit volatility.
+- Current Greek support is European Delta/Gamma/Vega. No Asian Greeks, Theta,
+  Rho or Greek confidence intervals; never imply those are implemented.
+- Reproduce identical full configurations, including threads, on the same
+  implementation/toolchain. `std::normal_distribution` is implementation-dependent;
+  cross-thread/platform results need statistical consistency, not identical bits.
+- Retain streaming/mergeable statistics, thread-local RNG and no hot-loop locks.
+  Use C++20, RAII, const correctness and focused value types; avoid owning raw pointers.
+- Keep core builds portable on Linux/macOS and CPU-only by default. GPU research
+  dependencies are optional. Profile before optimizing and record benchmark hardware.
+- Do not add pricing stretch features (Heston, barriers, CUDA, American options,
+  control variates, Sobol) without a specific request.
 
-V1 assumes zero dividends, a flat continuously compounded risk-free rate, constant volatility,
-frictionless markets, and risk-neutral geometric Brownian motion.
+## Forecasting and ML contract
 
-All Monte Carlo results must report standard error and a 95% confidence interval. Validate
-European results against analytical Black-Scholes values. Monte Carlo tests must use statistical
-tolerances rather than require equality with analytical prices.
+- Stock targets use trading sessions; energy uses explicitly defined hourly
+  timestamps, units, local calendar rules and reporting availability.
+- Pricing and forecasts use different measures. Never present a risk-neutral
+  simulation or option Greek as a stock-direction predictor.
+- Fit features, scalers, tuning and calibration on training data only. Training
+  labels must mature by the forecast origin and not cross fold boundaries.
+- Split by time across all assets; no random train/test shuffling of financial
+  histories. Predeclare windows and settings, then use a frozen final procedure.
+- Compare identical assets, origins, targets and datasets. Check latest-price and
+  always-up stock baselines; use previous-day/week baselines for hourly demand.
+- Report price/return errors, direction, calibration/range metrics where supported,
+  sample counts, runtime and uncertainty. Do not label `100 - MAPE` as accuracy.
+- Preserve failures and inconclusive results. Do not silently drop difficult rows,
+  change requested workloads or fall back to another model without disclosure.
+- A downloaded dataset is not automatically point-in-time or survivorship-free.
+  Fundamentals and weather must be available at the origin; future realized
+  weather and retroactively backfilled statements are not valid predictors.
+- Check foundation-model licenses, checkpoint dates and possible pretraining overlap.
+  A reserved local period is not clean if a pretrained model already saw it.
+- As of the October 17, 2026 experiment, 2018–2023 is inspected validation.
+  2024 onward is downloaded but unscored in that comparison; treat it only as a
+  candidate final period, not a completed test or replacement for the old missing holdout.
+- No model family is assumed best. Keep baseline results when challengers lose.
+  Implement only the requested milestone; neural and energy work remain planned.
 
-Fixed seeds need only be bit-reproducible on the same implementation and toolchain with an
-identical full configuration, including thread count. Document that `std::normal_distribution` is
-implementation-dependent. Different thread counts and platforms must produce statistically
-consistent, not bit-identical, estimates.
+## Safety and repository hygiene
 
-In antithetic mode, `num_paths` counts total trajectories and must be even. Each pair's average
-discounted payoff is one independent statistical observation for estimator variance and confidence
-interval calculations. Reject odd path counts instead of changing them silently.
+Use `apply_patch` for edits and `rg` for searches. Preserve existing uncommitted
+work; do not reset, stash, commit, push or delete user data without authorization.
+Keep commits coherent, buildable and tested when commits are requested.
 
-For an Asian option with M steps, monitor at jT/M for j=1,...,M. Exclude the initial spot and
-include maturity. Simulate paths incrementally without storing an N-by-M matrix.
+Keep optional dependencies in a virtual environment; do not require system-wide
+installs or CUDA. Never commit credentials, downloaded histories, caches or local
+builds. Never ask users to paste API keys in chat. Retain TLS checks and respect
+provider limits; do not bypass challenges or run downloaded scripts blindly.
+Use new snapshot/report paths, validate data and record provider, adjustment
+semantics, retrieval dates, input hashes, source revision and dependency versions.
 
-Support zero volatility and zero maturity. Require finite inputs, positive spot and strike,
-nonnegative volatility and maturity, positive paths and threads, and positive steps for path
-simulation. Negative interest rates are valid.
+Remove only temporary files created for the current work. Preserve datasets and
+results needed to reproduce claims. Do not call old benchmarks dead code simply
+because they are not part of the normal CLI. Keep docs brief and comments to
+necessary one-line explanations. Do not create a new audit report unless requested.
 
-Finite-difference bumps must be configurable. Default the spot bump to 1% of spot and the absolute
-volatility bump to 0.01. Report Vega per one volatility percentage point; convert a derivative with
-respect to unit volatility by multiplying it by 0.01 for display.
+## Verification
 
-## Performance Constraints
+Before completing a code change:
 
-Target ordinary laptop CPUs on Linux and macOS. Do not require CUDA. Do not retain millions of
-payoffs or complete paths. Prefer streaming calculations, mergeable running statistics, batching,
-and thread-local worker state. Avoid locks in simulation hot loops. Profile before optimizing and
-publish only measurements produced on the development machine with its environment documented.
-
-## C++ Requirements
-
-Use C++20, RAII, const correctness, `std::span` where appropriate, and value semantics where
-practical. Avoid raw owning pointers, global mutable state, unnecessary inheritance, and shared
-random-number generators. Keep the engine, CLI, tests, and normal benchmark executable portable
-between Linux and macOS.
-
-## CLI Contract
-
-Use `--method mc|analytical|both`, defaulting to `both` for European calls and puts. Instruments
-without an analytical implementation use Monte Carlo and clearly state that an analytical
-reference is unavailable. Default European output includes the analytical price, Monte Carlo
-estimate, absolute difference, standard error, confidence interval, and runtime.
-
-## Testing and Build
-
-Every quantitative feature requires tests. Before considering a change complete, run:
-
-```text
+```bash
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Keep commits coherent, buildable, and tested. Do not implement features outside the requested
-milestone unless required for correctness. Before changing established architecture, explain why
-it cannot support the requested feature.
+For changes touching optional models, also run native tests after installing their
+documented requirements in `.venv`:
+
+```bash
+.venv/bin/python tests/test_classical_forecasts.py
+.venv/bin/python tests/test_boosted_forecasts.py
+```
+
+Default CTest may skip optional model cases; a skip is not a tested native fit.
+For documentation-only changes, check local links, commands and `git diff --check`.
+Report what actually ran, failures/skips and remaining limitations. No test suite
+can justify a claim that all bugs are impossible.

@@ -1,6 +1,21 @@
 set(history "${SOURCE_DIR}/examples/sample_prices.csv")
 set(metadata "${SOURCE_DIR}/examples/sample_prices.meta")
 
+foreach(type IN ITEMS call asian-call)
+    foreach(mode IN ITEMS plain paired)
+        if(mode STREQUAL "paired")
+            set(arguments --paths 2 --antithetic)
+        else()
+            set(arguments --paths 1)
+        endif()
+        execute_process(COMMAND "${CLI}" price --type "${type}" ${arguments}
+            RESULT_VARIABLE status OUTPUT_VARIABLE output ERROR_VARIABLE error)
+        if(NOT status EQUAL 0 OR NOT output MATCHES "unavailable \\(need two independent observations\\)")
+            message(FATAL_ERROR "Single-observation uncertainty was not explained: ${error}")
+        endif()
+    endforeach()
+endforeach()
+
 execute_process(COMMAND "${CLI}" forecast --csv "${history}" --metadata "${metadata}"
     --lookback-days 10 RESULT_VARIABLE status OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT status EQUAL 0)

@@ -19,7 +19,7 @@ AnalyticalPrices require_finite_prices(const AnalyticalPrices prices) {
         throw std::overflow_error{
             "Black-Scholes price exceeds the finite numeric range"};
     }
-    return prices;
+    return {.call = std::max(prices.call, 0.0), .put = std::max(prices.put, 0.0)};
 }
 
 AnalyticalPrices calculate_prices(const double spot, const double strike, const double rate,
