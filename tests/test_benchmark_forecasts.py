@@ -61,6 +61,13 @@ class BenchmarkTests(unittest.TestCase):
         self.manifest.write_text(json.dumps(self.config), encoding="utf-8")
 
     def test_ensemble_blend_and_metrics(self):
+        for magnitude in (1e308, 1e-200, 5e-324):
+            self.assertEqual(benchmark.root_mean_square([magnitude] * 4), magnitude)
+        for values in ([], [float("nan")], [float("inf")]):
+            with self.assertRaises(ValueError):
+                benchmark.root_mean_square(values)
+        extreme = [{"current_price": 1, "forecast_price": 1e308, "actual_price": 1}] * 4
+        self.assertAlmostEqual(ensemble_forecasts.point_metrics(extreme, "forecast_price")["rmse"] / 1e308, 1)
         self.assertEqual(ensemble_forecasts.blend(100, 120), 110)
         self.assertEqual(ensemble_forecasts.blend(120, 100), 110)
         for price in (5e-324, 100, sys.float_info.max):

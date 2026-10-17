@@ -5,7 +5,7 @@ import math
 import statistics
 from pathlib import Path
 
-from benchmark_forecasts import sha256
+from benchmark_forecasts import root_mean_square, sha256
 from ridge_forecasts import evaluate as evaluate_ridge
 
 
@@ -21,7 +21,7 @@ def point_metrics(points, key):
         raise ValueError("ensemble evaluation requires forecast points")
     moving = [point for point in points if point[key] != point["current_price"]]
     result = {"mae": statistics.mean(errors),
-              "rmse": math.hypot(*errors) / math.sqrt(len(errors)),
+              "rmse": root_mean_square(errors),
               "directional_predictions": len(moving),
               "directional_accuracy": statistics.mean(
                   ((p[key] > p["current_price"]) - (p[key] < p["current_price"])) ==

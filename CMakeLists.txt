@@ -149,6 +149,8 @@ if(BUILD_TESTING)
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_forecasts.py)
         add_test(NAME forecast_residual_runner
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_residual_forecasts.py)
+        add_test(NAME forecast_classical_runner
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_classical_forecasts.py)
     endif()
     add_test(NAME history_cli_workflow
         COMMAND ${CMAKE_COMMAND}

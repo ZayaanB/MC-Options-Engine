@@ -6,7 +6,7 @@ import platform
 import statistics
 from pathlib import Path
 
-from benchmark_forecasts import HORIZONS, read_asset, read_manifest, sha256
+from benchmark_forecasts import HORIZONS, read_asset, read_manifest, root_mean_square, sha256
 
 
 def ridge_predict(features, targets, current, penalty=1.0):
@@ -105,7 +105,7 @@ def evaluate(manifest):
             for name, key in (("ridge", "forecast_price"), ("latest_price", "current_price")):
                 errors = [point[key] - point["actual_price"] for point in points]
                 metrics[name] = {"mae": statistics.mean(abs(error) for error in errors),
-                                 "rmse": math.hypot(*errors) / math.sqrt(len(errors))}
+                                 "rmse": root_mean_square(errors)}
             moving = [p for p in points if p["forecast_price"] != p["current_price"]]
             metrics["directional_predictions"] = len(moving)
             metrics["directional_accuracy"] = statistics.mean(

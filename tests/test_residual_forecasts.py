@@ -89,6 +89,22 @@ class ResidualTests(unittest.TestCase):
         report = residual.evaluate(self.manifest)
         final_forecast.save_new(validation, report)
         procedure = final_forecast.freeze(self.manifest, validation, "latest_price")
+        incomplete = {**report, "results": report["results"][:-1]}
+        validation.write_text(json.dumps(incomplete))
+        with self.assertRaisesRegex(ValueError, "missing"):
+            final_forecast.freeze(self.manifest, validation, "ensemble")
+        duplicate = {**report, "results": report["results"] + [report["results"][0]]}
+        validation.write_text(json.dumps(duplicate))
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            final_forecast.freeze(self.manifest, validation, "ensemble")
+        duplicate_points = json.loads(json.dumps(report))
+        group = duplicate_points["results"][0]
+        group["points"].insert(1, group["points"][0])
+        group["forecasts"] += 1
+        validation.write_text(json.dumps(duplicate_points))
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            final_forecast.freeze(self.manifest, validation, "ensemble")
+        validation.write_text(json.dumps(report))
         changed = {**procedure, "source_hashes": {}}
         with self.assertRaisesRegex(ValueError, "source"):
             final_forecast.verify(changed, self.manifest)
