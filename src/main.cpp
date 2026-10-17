@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <iomanip>
@@ -23,6 +24,7 @@
 #include "mc/instruments/european_put.hpp"
 #include "mc/instruments/instrument.hpp"
 #include "mc/pricing/analytical_black_scholes.hpp"
+#include "mc/pricing/greeks_engine.hpp"
 #include "mc/pricing/monte_carlo_engine.hpp"
 #include "mc/pricing/path_monte_carlo_engine.hpp"
 #include "mc/validation.hpp"
@@ -31,6 +33,7 @@ namespace {
 
 constexpr std::string_view kUsage = R"(Usage:
   mcprice price [options]
+  mcprice greeks [options]
   mcprice forecast --csv FILE [options]
   mcprice backtest --csv FILE [options]
 
@@ -48,6 +51,14 @@ Price options:
   --steps N                     Monitoring steps for path simulation (default: 1)
   --seed N                      Unsigned RNG seed (default: 42)
   --antithetic                  Enable antithetic variates; paths must be even
+  --greeks                      Include European Delta, Gamma and Vega with price
+
+Greek calculator options:
+  Uses the price inputs above, except --method; European call/put only.
+  --spot-bump VALUE             Absolute spot bump (default: 1% of spot)
+  --vol-bump VALUE              Absolute volatility bump (default: 0.01)
+  Vega is per one volatility percentage point. Greek confidence intervals
+  are not implemented. Bump options also work with price --greeks.
 
 Forecast options:
   --csv FILE                    Historical CSV file with Date and price columns
@@ -132,10 +143,15 @@ void print_monte_carlo_result(const mc::PricingResult& result,
     if (reference) {
         std::cout << "Absolute difference:    " << std::abs(result.price - *reference) << '\n';
     }
-    std::cout << "Standard error:         " << result.standard_error << '\n'
-              << "95% confidence interval:[" << result.confidence_lower << ", "
-              << result.confidence_upper << "]\n"
-              << "Paths:                  " << result.paths << '\n'
+    if (result.observations < 2) {
+        std::cout << "Standard error:         unavailable (need two independent observations)\n"
+                  << "95% confidence interval:unavailable (need two independent observations)\n";
+    } else {
+        std::cout << "Standard error:         " << result.standard_error << '\n'
+                  << "95% confidence interval:[" << result.confidence_lower << ", "
+                  << result.confidence_upper << "]\n";
+    }
+    std::cout << "Paths:                  " << result.paths << '\n'
               << "Observations:           " << result.observations << '\n'
               << "Threads:                " << options.simulation.num_threads << '\n'
               << "Batch size:             ";
@@ -152,6 +168,45 @@ void print_monte_carlo_result(const mc::PricingResult& result,
               << "Runtime:                " << result.runtime_seconds << " s\n"
               << "Throughput:             " << result.paths_per_second / 1'000'000.0
               << " M paths/s\n";
+}
+
+struct TimedGreeks {
+    mc::GreeksResult result;
+    double runtime_seconds;
+};
+
+TimedGreeks calculate_greeks(const mc::cli::PriceOptions& options) {
+    const auto instrument = make_instrument(options.type, options.option.strike);
+    const auto start = std::chrono::steady_clock::now();
+    const auto result = mc::GreeksEngine{}.calculate(
+        *instrument, options.market, options.option, options.simulation, options.greeks);
+    return {result, std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()};
+}
+
+void print_greeks(const TimedGreeks& calculation, const mc::cli::PriceOptions& options) {
+    std::cout << "\nMonte Carlo finite-difference Greeks (common random numbers)\n"
+              << "Delta:                  " << calculation.result.delta << '\n'
+              << "Gamma:                  " << calculation.result.gamma << '\n'
+              << "Vega (per 1 vol point): " << calculation.result.vega << '\n'
+              << "Spot bump:              "
+              << options.greeks.spot_bump.value_or(0.01 * options.market.spot) << '\n'
+              << "Volatility bump:        " << options.greeks.volatility_bump << '\n'
+              << "Paths per revaluation:  " << options.simulation.num_paths << '\n'
+              << "Threads:                " << options.simulation.num_threads << '\n'
+              << "Batch size:             " << options.simulation.batch_size
+              << " (0 = automatic)\n"
+              << "Seed:                   " << options.simulation.seed << '\n'
+              << "Antithetic:             "
+              << (options.simulation.antithetic ? "yes" : "no") << '\n'
+              << "Greek runtime (5 runs): " << calculation.runtime_seconds << " s\n"
+              << "Greek confidence intervals: not implemented; estimates also have bump error\n";
+}
+
+void run_greeks(const mc::cli::PriceOptions& options) {
+    const auto calculation = calculate_greeks(options);
+    std::cout << std::fixed << std::setprecision(6) << "European Option Greek Calculator\n\n";
+    print_inputs(options);
+    print_greeks(calculation, options);
 }
 
 void run_price(const mc::cli::PriceOptions& options) {
@@ -174,6 +229,9 @@ void run_price(const mc::cli::PriceOptions& options) {
         run_analytical ? std::optional<double>{
                              analytical_price(options.type, options.market, options.option)}
                        : std::nullopt;
+    const std::optional<TimedGreeks> greeks =
+        options.include_greeks ? std::optional<TimedGreeks>{calculate_greeks(options)}
+                              : std::nullopt;
 
     std::cout << std::fixed << std::setprecision(6)
               << "Monte Carlo Options Pricing Engine\n"
@@ -200,6 +258,9 @@ void run_price(const mc::cli::PriceOptions& options) {
                                   options.simulation);
         }
         print_monte_carlo_result(result, options, reference);
+    }
+    if (greeks) {
+        print_greeks(*greeks, options);
     }
 }
 
@@ -512,7 +573,8 @@ int main(const int argc, const char* const argv[]) {
             return 0;
         }
         const std::string_view command = arguments.front();
-        if (command != "price" && command != "forecast" && command != "backtest") {
+        if (command != "price" && command != "greeks" &&
+            command != "forecast" && command != "backtest") {
             throw std::invalid_argument{"unknown command: " + std::string{arguments.front()}};
         }
         arguments.erase(arguments.begin());
@@ -523,6 +585,8 @@ int main(const int argc, const char* const argv[]) {
 
         if (command == "price") {
             run_price(mc::cli::parse_price_options(arguments));
+        } else if (command == "greeks") {
+            run_greeks(mc::cli::parse_greeks_options(arguments));
         } else if (command == "forecast") {
             run_forecast(mc::cli::parse_forecast_options(arguments));
         } else {

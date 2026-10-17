@@ -31,6 +31,11 @@ Export daily historical prices from a data provider you have access to. For
 Apple, save the export as `Notes-dont-commit/AAPL.csv`. That directory is
 ignored by Git. Use the same workflow for any other ticker.
 
+An optional [download command](../apps/prediction/README.md) fetches validated
+OHLCV histories and metadata into a new private snapshot folder. It requires
+`python/requirements-data.txt`, respects provider failures and does not overwrite
+existing files. The current models still use the selected price column only.
+
 The file must have one header row and one row per trading session, oldest first:
 
 ```csv
@@ -214,8 +219,8 @@ forecast. A fixed full configuration reproduces on the same toolchain.
 - Configure cannot download Catch2: restore network access or install Catch2 3.
 - Build fails on C++20 library features: use a newer compiler and standard library.
 - Forecast seems stale: check the final CSV date; no live quote is fetched.
-- `nan` Monte Carlo uncertainty: one independent observation cannot estimate variance.
+- Unavailable Monte Carlo uncertainty: one independent observation cannot estimate variance.
 
 Option pricing is a separate command. Its risk-neutral rate is not the
-historical drift used above. Greeks are currently exposed through the C++ API
-and benchmarks, rather than forecast or pricing CLI flags.
+historical drift used above. Use `mcprice greeks` or `mcprice price --greeks`
+for European Delta/Gamma/Vega; see the [Greek calculator](../apps/greeks/README.md).

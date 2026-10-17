@@ -3,6 +3,7 @@
 #include <span>
 #include <string_view>
 
+#include "mc/greeks_config.hpp"
 #include "mc/market_data.hpp"
 #include "mc/option_parameters.hpp"
 #include "mc/simulation_config.hpp"
@@ -18,9 +19,12 @@ struct PriceOptions {
     MarketData market{100.0, 0.05, 0.20};
     OptionParameters option{100.0, 1.0};
     SimulationConfig simulation{1'000'000, 42, 1, 0, false, 1};
+    bool include_greeks{false};
+    GreeksConfig greeks{};
 };
 
 [[nodiscard]] PriceOptions parse_price_options(std::span<const std::string_view> arguments);
+[[nodiscard]] PriceOptions parse_greeks_options(std::span<const std::string_view> arguments);
 [[nodiscard]] std::string_view option_type_name(OptionType type) noexcept;
 [[nodiscard]] std::string_view pricing_method_name(PricingMethod method) noexcept;
 

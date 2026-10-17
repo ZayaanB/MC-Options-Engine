@@ -71,6 +71,7 @@ Day 37 adds a [fixed 50/50 ensemble](ensemble-forecast.md) with paired compariso
 Day 38 adds [out-of-sample residual ranges](residual-forecast.md) and coverage checks.
 Day 39 provides the [frozen final-holdout workflow](final-forecast.md).
 Optional [ARIMA/ETS experiments](classical-forecast.md) remain validation-only challengers.
+The [LightGBM return experiment](boosted-forecast.md) adds a fixed nonlinear challenger.
 
 ## Run the final holdout
 

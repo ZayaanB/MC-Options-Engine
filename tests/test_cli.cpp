@@ -24,6 +24,9 @@ TEST_CASE("price CLI uses the canonical European call defaults", "[cli]") {
     REQUIRE(options.simulation.num_steps == 1);
     REQUIRE(options.simulation.seed == 42);
     REQUIRE_FALSE(options.simulation.antithetic);
+    REQUIRE_FALSE(options.include_greeks);
+    REQUIRE_FALSE(options.greeks.spot_bump.has_value());
+    REQUIRE(options.greeks.volatility_bump == 0.01);
 }
 
 TEST_CASE("price CLI parses market and simulation configuration", "[cli]") {
@@ -105,4 +108,39 @@ TEST_CASE("price CLI rejects malformed arguments", "[cli][validation]") {
     REQUIRE_THROWS_AS(mc::cli::parse_price_options(unknown), std::invalid_argument);
     REQUIRE_THROWS_AS(mc::cli::parse_price_options(positional), std::invalid_argument);
     REQUIRE_THROWS_AS(mc::cli::parse_price_options(duplicate), std::invalid_argument);
+}
+
+TEST_CASE("Greek CLI shares price inputs and accepts explicit bumps", "[cli][greeks]") {
+    constexpr std::array arguments{
+        std::string_view{"--type"}, std::string_view{"put"},
+        std::string_view{"--spot-bump"}, std::string_view{"0.5"},
+        std::string_view{"--vol-bump"}, std::string_view{"0.005"},
+        std::string_view{"--antithetic"},
+    };
+    const auto options = mc::cli::parse_greeks_options(arguments);
+    REQUIRE(options.include_greeks);
+    REQUIRE(options.method == mc::cli::PricingMethod::monte_carlo);
+    REQUIRE(options.type == mc::cli::OptionType::put);
+    REQUIRE(options.greeks.spot_bump == 0.5);
+    REQUIRE(options.greeks.volatility_bump == 0.005);
+    REQUIRE(options.simulation.antithetic);
+
+    constexpr std::array combined{std::string_view{"--greeks"}};
+    const auto price = mc::cli::parse_price_options(combined);
+    REQUIRE(price.include_greeks);
+    REQUIRE(price.method == mc::cli::PricingMethod::both);
+}
+
+TEST_CASE("Greek CLI rejects unsupported combinations", "[cli][greeks][validation]") {
+    constexpr std::array asian{std::string_view{"--type"}, std::string_view{"asian-call"}};
+    constexpr std::array method{std::string_view{"--method"}, std::string_view{"mc"}};
+    constexpr std::array analytical{std::string_view{"--method"},
+                                    std::string_view{"analytical"}, std::string_view{"--greeks"}};
+    constexpr std::array ignored_bump{std::string_view{"--spot-bump"}, std::string_view{"1"}};
+    constexpr std::array nonfinite{std::string_view{"--vol-bump"}, std::string_view{"inf"}};
+    REQUIRE_THROWS_AS(mc::cli::parse_greeks_options(asian), std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_greeks_options(method), std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_price_options(analytical), std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_price_options(ignored_bump), std::invalid_argument);
+    REQUIRE_THROWS_AS(mc::cli::parse_greeks_options(nonfinite), std::invalid_argument);
 }
